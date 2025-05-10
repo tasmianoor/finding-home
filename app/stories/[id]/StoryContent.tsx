@@ -331,7 +331,11 @@ export default function StoryContent({ storyId }: StoryContentProps) {
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        return
+      }
       if (!session) {
         router.push('/signin')
         return
@@ -345,7 +349,12 @@ export default function StoryContent({ storyId }: StoryContentProps) {
         .single()
 
       if (profileError) {
-        console.error('Error fetching user profile:', profileError)
+        console.error('Error fetching user profile:', profileError.message)
+        return
+      }
+
+      if (!userProfile) {
+        console.error('User profile not found')
         return
       }
 
@@ -355,29 +364,40 @@ export default function StoryContent({ storyId }: StoryContentProps) {
         .insert({
           story_id: storyId,
           user_id: session.user.id,
-          content: commentText,
+          content: commentText.trim(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
-        .select()
+        .select(`
+          *,
+          profiles!comments_user_id_fkey (
+            username,
+            full_name,
+            avatar_url
+          )
+        `)
         .single()
 
       if (commentError) {
-        console.error('Error posting comment:', commentError)
+        console.error('Error posting comment:', commentError.message)
         return
       }
 
-      // Combine comment with profile data
-      const commentWithProfile = {
-        ...comment,
-        profiles: userProfile
+      if (!comment) {
+        console.error('No comment data returned')
+        return
       }
 
-      setComments(prev => [commentWithProfile as Comment, ...prev])
+      // Update the comments state with the new comment
+      setComments(prev => [comment as Comment, ...prev])
       setCommentText("")
       setCommentsCount(prev => prev + 1)
     } catch (error) {
-      console.error('Error posting comment:', error)
+      if (error instanceof Error) {
+        console.error('Error posting comment:', error.message)
+      } else {
+        console.error('Unknown error posting comment:', error)
+      }
     }
   }
 
@@ -386,6 +406,13 @@ export default function StoryContent({ storyId }: StoryContentProps) {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         router.push('/signin')
+        return
+      }
+
+      // Check if the parent comment is already a reply
+      const existingComment = comments.find(c => c.id === parentId)
+      if (existingComment?.parent_id) {
+        console.error('Cannot reply to a reply')
         return
       }
 
@@ -428,10 +455,10 @@ export default function StoryContent({ storyId }: StoryContentProps) {
 
       // Update the comments tree
       const newComments = [...comments]
-      const parentComment = findCommentById(newComments, parentId)
-      if (parentComment) {
-        parentComment.replies = parentComment.replies || []
-        parentComment.replies.push(replyWithProfile as Comment)
+      const targetComment = findCommentById(newComments, parentId)
+      if (targetComment) {
+        targetComment.replies = targetComment.replies || []
+        targetComment.replies.push(replyWithProfile as Comment)
       }
       
       setComments(newComments)
@@ -551,50 +578,30 @@ export default function StoryContent({ storyId }: StoryContentProps) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen" style={{ background: "linear-gradient(to bottom, #fffdf5, #ffefd0)" }}>
-      {/* Header */}
-      <header className="bg-white flex justify-between items-center px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 sticky top-0 z-50 shadow-sm">
-        <Link href="/" className="flex items-center gap-1 sm:gap-2">
-          <div className="bg-black rounded p-0.5 sm:p-1">
-            <HomeIcon className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-          </div>
-          <span className="text-xs sm:text-sm md:text-base text-gray-800 font-medium">Finding Home</span>
-        </Link>
-        <div className="flex items-center gap-2 sm:gap-3 md:gap-6">
-          <Link href="/add-memories" className="flex items-center gap-1 text-gray-800">
-            <PlusCircle className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="text-xs sm:text-sm md:text-base hidden xs:inline">Add your own memories</span>
-            <span className="text-xs sm:text-sm md:text-base inline xs:hidden">Add</span>
-          </Link>
-          <Link href="/profile" className="text-xs sm:text-sm md:text-base text-gray-800">
-            Profile
-          </Link>
-        </div>
-      </header>
-
+    <div className="flex flex-col min-h-screen" style={{ background: "linear-gradient(to bottom, #faf9f5, #faf9f5)" }}>
       {/* Main Content */}
       <main className="flex-1">
         <div className="max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-10 sm:py-12 md:py-16 lg:py-20">
           {/* Back Button */}
           <Link
             href="/stories"
-            className="inline-flex items-center gap-1 sm:gap-2 text-gray-800 hover:text-amber-700 mb-10 sm:mb-12 md:mb-16"
+            className="inline-flex items-center gap-1 sm:gap-2 text-[#171415] hover:text-[#b15e4e] transition-colors mb-10 sm:mb-12 md:mb-16 newsreader-400"
           >
             <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
-            <span className="text-xs sm:text-sm md:text-base font-medium">Back to all stories</span>
+            <span className="text-xs sm:text-sm md:text-base">Back to all stories</span>
           </Link>
 
           {/* Story Header */}
           <div className="mb-8 sm:mb-10 md:mb-12 relative">
             <div className="flex justify-between items-start mb-4 sm:mb-6">
               {story.isNew && (
-                <div className="inline-block bg-amber-200 px-3 sm:px-4 py-1 rounded-md">
-                  <span className="font-medium text-amber-900 text-xs sm:text-sm">NEW STORY</span>
+                <div className="inline-block bg-[#faf9f5] px-3 sm:px-4 py-1 rounded-md border border-[#e4d9cb]">
+                  <span className="font-medium text-[#171415] text-xs sm:text-sm newsreader-400">NEW STORY</span>
                 </div>
               )}
               <button
                 onClick={toggleBookmark}
-                className="text-amber-500 hover:text-amber-600 transition-colors"
+                className="text-[#171415] hover:text-[#b15e4e] transition-colors"
                 aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
               >
                 <Bookmark
@@ -604,28 +611,18 @@ export default function StoryContent({ storyId }: StoryContentProps) {
               </button>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 sm:mb-6 md:mb-8">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#171415] mb-4 sm:mb-6 md:mb-8 fraunces-400">
               {story.title}
             </h1>
 
-            <p className="text-sm sm:text-base md:text-lg text-gray-800 mb-6 sm:mb-8 md:mb-10">{story.description}</p>
-
-            {/* Share button - positioned absolutely */}
-            <div className="absolute right-0 bottom-0 md:bottom-10">
-              <button
-                className="bg-gray-900 text-white p-2 rounded-full hover:bg-gray-800 transition-colors"
-                aria-label="Share this story"
-              >
-                <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
-              </button>
-            </div>
+            <p className="text-sm sm:text-base md:text-lg text-[#171415]/80 mb-6 sm:mb-8 md:mb-10 newsreader-400">{story.description}</p>
 
             {/* Tags */}
             <div className="flex flex-wrap gap-2 mb-6 sm:mb-8 md:mb-10">
               {story.tags?.map((tag) => (
                 <span
                   key={tag.name}
-                  className="inline-flex items-center px-2 sm:px-3 py-1 rounded-md bg-gray-800 text-white text-xs sm:text-sm"
+                  className="inline-flex items-center px-2 sm:px-3 py-1 rounded-md bg-[#faf9f5] text-[#171415] text-xs sm:text-sm newsreader-400 border border-[#e4d9cb]"
                 >
                   <span className="mr-1">{tag.icon}</span>
                   {tag.name}
@@ -635,7 +632,7 @@ export default function StoryContent({ storyId }: StoryContentProps) {
           </div>
 
           {/* Media Player */}
-          <div className="bg-gray-900 rounded-lg overflow-hidden shadow-md">
+          <div className="bg-[#171415] rounded-lg overflow-hidden shadow-md">
             <div className="flex items-center p-3 sm:p-4">
               <img
                 src={story.thumbnail_url || "/placeholder.svg"}
@@ -643,12 +640,12 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                 className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-md mr-3 sm:mr-4"
               />
               <div className="flex-1">
-                <h2 className="text-white text-sm sm:text-base font-medium mb-1">{story.title}</h2>
-                <p className="text-gray-300 text-xs sm:text-sm line-clamp-1">{story.description}</p>
+                <h2 className="text-white text-sm sm:text-base font-medium mb-1 fraunces-400">{story.title}</h2>
+                <p className="text-[#e4d9cb] text-xs sm:text-sm line-clamp-1 newsreader-400">{story.description}</p>
               </div>
               <button
                 onClick={toggleBookmark}
-                className="text-white hover:text-amber-400 transition-colors ml-2"
+                className="text-white hover:text-[#b15e4e] transition-colors ml-2"
                 aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
               >
                 <Bookmark className="h-4 w-4 sm:h-5 sm:w-5" fill={isBookmarked ? "currentColor" : "none"} />
@@ -676,11 +673,11 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                 <div className="px-3 sm:px-4 pb-3 sm:pb-4">
                   <div
                     ref={progressRef}
-                    className="h-1 bg-gray-700 rounded-full mb-3 cursor-pointer"
+                    className="h-1 bg-[#e4d9cb] rounded-full mb-3 cursor-pointer"
                     onClick={handleProgressClick}
                   >
                     <div
-                      className="h-full bg-amber-500 rounded-full"
+                      className="h-full bg-[#b15e4e] rounded-full"
                       style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
                     ></div>
                   </div>
@@ -689,31 +686,31 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                     <div className="flex items-center">
                       <button
                         onClick={rewind}
-                        className="text-white hover:text-amber-400 transition-colors mr-3 sm:mr-4"
+                        className="text-white hover:text-[#b15e4e] transition-colors mr-3 sm:mr-4"
                         aria-label="Rewind 10 seconds"
                       >
                         <Rewind className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                       <button
                         onClick={togglePlay}
-                        className="bg-white hover:bg-amber-400 transition-colors rounded-full p-1 sm:p-1.5 mr-3 sm:mr-4"
+                        className="bg-white hover:bg-[#b15e4e] transition-colors rounded-full p-1 sm:p-1.5 mr-3 sm:mr-4"
                         aria-label={isPlaying ? "Pause" : "Play"}
                       >
                         {isPlaying ? (
-                          <Pause className="h-4 w-4 sm:h-5 sm:w-5 text-gray-900" />
+                          <Pause className="h-4 w-4 sm:h-5 sm:w-5 text-[#171415]" />
                         ) : (
-                          <Play className="h-4 w-4 sm:h-5 sm:w-5 text-gray-900" />
+                          <Play className="h-4 w-4 sm:h-5 sm:w-5 text-[#171415]" />
                         )}
                       </button>
                       <button
                         onClick={forward}
-                        className="text-white hover:text-amber-400 transition-colors"
+                        className="text-white hover:text-[#b15e4e] transition-colors"
                         aria-label="Forward 10 seconds"
                       >
                         <FastForward className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
                     </div>
-                    <span className="text-white text-xs sm:text-sm">{formatDuration(story.duration)}</span>
+                    <span className="text-white text-xs sm:text-sm newsreader-400">{formatDuration(story.duration)}</span>
                   </div>
                 </div>
 
@@ -743,43 +740,42 @@ export default function StoryContent({ storyId }: StoryContentProps) {
         </div>
 
         {/* Transcript Section - Full Width */}
-        <div className="w-full bg-white mt-8 sm:mt-10 md:mt-12">
+        <div className="w-full bg-[#faf9f5] mt-8 sm:mt-10 md:mt-12">
           <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
-            <h2 className="text-gray-500 text-sm sm:text-base font-medium uppercase tracking-wider mb-6 sm:mb-8">
+            <h2 className="text-[#171415] text-sm sm:text-base font-medium uppercase tracking-wider mb-6 sm:mb-8 fraunces-400">
               TRANSCRIPT
             </h2>
 
             <div className="space-y-6">
-              <p className="text-gray-700 italic">{story.transcript_question}</p>
-
-              <p className="text-gray-800">{story.transcript_answer}</p>
+              <p className="text-[#171415]/80 italic newsreader-400">{story.transcript_question}</p>
+              <p className="text-[#171415] newsreader-400">{story.transcript_answer}</p>
             </div>
           </div>
         </div>
 
         {/* Comments Section - Full Width */}
-        <div className="w-full bg-white">
+        <div className="w-full bg-[#faf9f5]">
           <div className="max-w-4xl mx-auto px-3 xs:px-4 sm:px-6 md:px-8 py-6 sm:py-8 md:py-10">
             {/* Likes */}
             <div className="flex items-center gap-1 xs:gap-2 mb-4 sm:mb-6">
               <button
                 onClick={toggleLike}
-                className={`flex items-center gap-1 ${isLiked ? 'text-amber-600' : 'text-gray-600'} hover:text-amber-600 transition-colors`}
+                className={`flex items-center gap-1 ${isLiked ? 'text-[#b15e4e]' : 'text-[#171415]'} hover:text-[#b15e4e] transition-colors`}
               >
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
                 </svg>
-                <span className="text-gray-600 text-xs sm:text-sm">{likesCount} {likesCount === 1 ? 'person liked' : 'people liked'} this story</span>
+                <span className="text-[#171415] text-xs sm:text-sm newsreader-400">{likesCount} {likesCount === 1 ? 'person liked' : 'people liked'} this story</span>
               </button>
             </div>
 
             {/* Comments heading */}
-            <h3 className="text-gray-500 font-medium uppercase text-xs sm:text-sm mb-4 sm:mb-6">
+            <h3 className="text-[#171415] font-medium uppercase text-xs sm:text-sm mb-4 sm:mb-6 fraunces-400">
               {commentsCount} {commentsCount === 1 ? 'COMMENT' : 'COMMENTS'}
             </h3>
 
             {/* Comment form */}
-            <form onSubmit={handleCommentSubmit} className="bg-white border border-gray-100 rounded-md p-3 sm:p-4 mb-6">
+            <form onSubmit={handleCommentSubmit} className="bg-white border border-[#e4d9cb] rounded-md p-3 sm:p-4 mb-6">
               <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
                 <img
                   src={story.profiles?.avatar_url || "/placeholder-avatar.png"}
@@ -787,22 +783,22 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                   className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                 />
                 <div>
-                  <p className="font-medium text-sm sm:text-base">{story.profiles?.full_name || "You"}</p>
-                  <p className="text-gray-500 text-xs">{new Date().toLocaleDateString()}</p>
+                  <p className="font-medium text-sm sm:text-base fraunces-400">{story.profiles?.full_name || "You"}</p>
+                  <p className="text-[#171415]/60 text-xs newsreader-400">{new Date().toLocaleDateString()}</p>
                 </div>
               </div>
               <textarea
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="What are your thoughts?"
-                className="w-full p-2 border border-gray-200 rounded-md mb-3 sm:mb-4 text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-amber-500"
+                className="w-full p-2 border border-[#e4d9cb] rounded-md mb-3 sm:mb-4 text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-[#b15e4e] newsreader-400"
                 rows={3}
               />
               <div className="flex justify-end">
                 <button
                   type="submit"
                   disabled={!commentText.trim()}
-                  className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md transition-colors"
+                  className="bg-[#171415] hover:bg-[#b15e4e] disabled:bg-[#e4d9cb] text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md transition-colors instrument-400"
                 >
                   Post
                 </button>
@@ -821,8 +817,8 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                         className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                       />
                       <div>
-                        <p className="font-medium text-sm sm:text-base">{comment.profiles.full_name}</p>
-                        <p className="text-gray-500 text-xs">
+                        <p className="font-medium text-sm sm:text-base fraunces-400">{comment.profiles.full_name}</p>
+                        <p className="text-[#171415]/60 text-xs newsreader-400">
                           {new Date(comment.created_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -831,42 +827,44 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                       {currentUserId === comment.user_id && (
                         <button
                           onClick={() => handleDeleteComment(comment.id)}
-                          className="text-red-500 text-xs sm:text-sm hover:text-red-600"
+                          className="text-[#b15e4e] text-xs sm:text-sm hover:text-[#171415] newsreader-400"
                         >
                           Delete
                         </button>
                       )}
-                      <button
-                        onClick={() => setReplyingTo(comment.id)}
-                        className="text-gray-500 text-xs sm:text-sm hover:text-amber-600"
-                      >
-                        Reply
-                      </button>
+                      {!comment.parent_id && (
+                        <button
+                          onClick={() => setReplyingTo(comment.id)}
+                          className="text-[#171415]/60 text-xs sm:text-sm hover:text-[#b15e4e] newsreader-400"
+                        >
+                          Reply
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <p className="text-gray-700 text-sm sm:text-base">{comment.content}</p>
+                  <p className="text-[#171415] text-sm sm:text-base newsreader-400">{comment.content}</p>
 
                   {/* Reply form */}
                   {replyingTo === comment.id && (
-                    <div className="mt-4 bg-white border border-gray-100 rounded-md p-3 sm:p-4">
+                    <div className="mt-4 bg-white border border-[#e4d9cb] rounded-md p-3 sm:p-4">
                       <textarea
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
                         placeholder="Write a reply..."
-                        className="w-full p-2 border border-gray-200 rounded-md mb-3 sm:mb-4 text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        className="w-full p-2 border border-[#e4d9cb] rounded-md mb-3 sm:mb-4 text-sm sm:text-base resize-none focus:outline-none focus:ring-2 focus:ring-[#b15e4e] newsreader-400"
                         rows={2}
                       />
                       <div className="flex justify-end gap-2">
                         <button
                           onClick={() => setReplyingTo(null)}
-                          className="text-gray-500 hover:text-gray-700 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition-colors"
+                          className="text-[#171415]/60 hover:text-[#171415] px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition-colors newsreader-400"
                         >
                           Cancel
                         </button>
                         <button
                           onClick={() => handleReplySubmit(comment.id)}
                           disabled={!replyText.trim()}
-                          className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md transition-colors"
+                          className="bg-[#171415] hover:bg-[#b15e4e] disabled:bg-[#e4d9cb] text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm rounded-md transition-colors instrument-400"
                         >
                           Reply
                         </button>
@@ -876,7 +874,7 @@ export default function StoryContent({ storyId }: StoryContentProps) {
 
                   {/* Nested replies */}
                   {comment.replies && comment.replies.length > 0 && (
-                    <div className="ml-6 sm:ml-8 md:ml-10 mt-4 sm:mt-6 space-y-4 sm:space-y-6 border-l-2 border-gray-100 pl-3 sm:pl-4 md:pl-6">
+                    <div className="ml-6 sm:ml-8 md:ml-10 mt-4 sm:mt-6 space-y-4 sm:space-y-6 border-l-2 border-[#e4d9cb] pl-3 sm:pl-4 md:pl-6">
                       {comment.replies.map((reply) => (
                         <div key={reply.id}>
                           <div className="flex items-start justify-between">
@@ -887,8 +885,8 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                                 className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                               />
                               <div>
-                                <p className="font-medium text-sm sm:text-base">{reply.profiles.full_name}</p>
-                                <p className="text-gray-500 text-xs">
+                                <p className="font-medium text-sm sm:text-base fraunces-400">{reply.profiles.full_name}</p>
+                                <p className="text-[#171415]/60 text-xs newsreader-400">
                                   {new Date(reply.created_at).toLocaleDateString()}
                                 </p>
                               </div>
@@ -896,13 +894,13 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                             {currentUserId === reply.user_id && (
                               <button
                                 onClick={() => handleDeleteComment(reply.id)}
-                                className="text-red-500 text-xs sm:text-sm hover:text-red-600"
+                                className="text-[#b15e4e] text-xs sm:text-sm hover:text-[#171415] newsreader-400"
                               >
                                 Delete
                               </button>
                             )}
                           </div>
-                          <p className="text-gray-700 text-sm sm:text-base">{reply.content}</p>
+                          <p className="text-[#171415] text-sm sm:text-base newsreader-400">{reply.content}</p>
                         </div>
                       ))}
                     </div>
@@ -926,15 +924,15 @@ export default function StoryContent({ storyId }: StoryContentProps) {
       </main>
 
       {/* Footer */}
-      <footer className="bg-black text-white py-3 xs:py-4 sm:py-6">
+      <footer className="bg-[#171415] text-white py-3 xs:py-4 sm:py-6">
         <div className="max-w-6xl mx-auto px-3 xs:px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center gap-1 xs:gap-2 mb-2 xs:mb-3 md:mb-0">
             <div className="bg-white rounded p-0.5 xs:p-1">
-              <HomeIcon className="h-2.5 w-2.5 xs:h-3 xs:w-3 sm:h-4 sm:w-4 text-black" />
+              <HomeIcon className="h-2.5 w-2.5 xs:h-3 xs:w-3 sm:h-4 sm:w-4 text-[#171415]" />
             </div>
-            <span className="text-xs xs:text-sm sm:text-base font-medium">Finding home</span>
+            <span className="text-xs xs:text-sm sm:text-base font-medium instrument-400">Finding home</span>
           </div>
-          <div className="text-center md:text-right text-[10px] xs:text-xs sm:text-sm">
+          <div className="text-center md:text-right text-[10px] xs:text-xs sm:text-sm newsreader-400">
             <p>Copyrighted 2024</p>
             <p>Designed by T. Noor</p>
           </div>

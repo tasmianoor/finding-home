@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { use } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 import MainNav from "../../components/MainNav"
 import Footer from "../../components/Footer"
-import Image from "next/image"
+import StoryContent from "./StoryContent"
 
 interface Story {
   id: string
@@ -44,7 +45,13 @@ interface Comment {
   }
 }
 
-export default function StoryPage({ params }: { params: { id: string } }) {
+interface StoryPageProps {
+  params: Promise<{ id: string }>
+}
+
+export default function StoryPage({ params }: StoryPageProps) {
+  const resolvedParams = use(params)
+  const storyId = resolvedParams.id
   const [story, setStory] = useState<Story | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +83,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
               full_name
             )
           `)
-          .eq('id', params.id)
+          .eq('id', storyId)
           .single()
 
         if (error) throw error
@@ -93,7 +100,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
     }
 
     fetchStory()
-  }, [supabase, params.id])
+  }, [supabase, storyId])
 
   useEffect(() => {
     const checkBookmarkStatus = async () => {
@@ -105,7 +112,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
           .from('bookmarks')
           .select()
           .eq('user_id', session.user.id)
-          .eq('story_id', params.id)
+          .eq('story_id', storyId)
           .single()
 
         setIsBookmarked(!!data)
@@ -115,7 +122,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
     }
 
     checkBookmarkStatus()
-  }, [supabase, params.id])
+  }, [supabase, storyId])
 
   useEffect(() => {
     const fetchComments = async () => {
@@ -133,7 +140,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
               avatar_url
             )
           `)
-          .eq('story_id', params.id)
+          .eq('story_id', storyId)
           .order('created_at', { ascending: false })
 
         if (error) {
@@ -157,7 +164,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
     }
 
     fetchComments()
-  }, [supabase, params.id])
+  }, [supabase, storyId])
 
   const toggleBookmark = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -175,13 +182,13 @@ export default function StoryPage({ params }: { params: { id: string } }) {
           .from('bookmarks')
           .delete()
           .eq('user_id', session.user.id)
-          .eq('story_id', params.id)
+          .eq('story_id', storyId)
       } else {
         await supabase
           .from('bookmarks')
           .insert({
             user_id: session.user.id,
-            story_id: params.id,
+            story_id: storyId,
             created_at: new Date().toISOString()
           })
       }
@@ -220,7 +227,7 @@ export default function StoryPage({ params }: { params: { id: string } }) {
       const { data: comment, error: commentError } = await supabase
         .from('comments')
         .insert({
-          story_id: params.id,
+          story_id: storyId,
           user_id: session.user.id,
           content: newComment.trim(),
           created_at: new Date().toISOString(),
@@ -253,34 +260,16 @@ export default function StoryPage({ params }: { params: { id: string } }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#faf9f5]">
-        <MainNav />
-        <main className="pt-16">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-            <div className="text-center">
-              <p className="text-[#171415] newsreader-400">Loading...</p>
-            </div>
-          </div>
-        </main>
-        <Footer />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
       </div>
     )
   }
 
-  if (error || !story) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-[#faf9f5]">
-        <MainNav />
-        <main className="pt-16">
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-            <div className="text-center">
-              <p className="text-[#171415] newsreader-400">
-                {error || 'Story not found'}
-              </p>
-            </div>
-          </div>
-        </main>
-        <Footer />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-red-500">{error}</div>
       </div>
     )
   }
@@ -288,190 +277,8 @@ export default function StoryPage({ params }: { params: { id: string } }) {
   return (
     <div className="min-h-screen bg-[#faf9f5]">
       <MainNav />
-      <main className="pt-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-12">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-2 text-[#171415] hover:text-[#b15e4e] transition-colors mb-12 newsreader-400"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15.8332 10H4.1665" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M8.33317 5L3.33317 10L8.33317 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Back
-          </button>
-
-          <article className="rounded-lg overflow-hidden">
-            {/* Story Title and Bookmark */}
-            <div className="flex items-center justify-between mb-6">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] fraunces-400">
-                {story.title}
-              </h1>
-              <button
-                onClick={toggleBookmark}
-                className="p-2 hover:bg-[#faf9f5] rounded-full transition-colors"
-              >
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 24 24"
-                  fill={isBookmarked ? "currentColor" : "none"}
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="text-[#171415] hover:text-[#b15e4e] transition-colors"
-                >
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Submitter Info */}
-            <p className="text-[#171415]/60 text-lg mb-8 fraunces-400">
-              Submitted by {story.profiles?.full_name || 'Anonymous'} • {new Date(story.created_at).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric'
-              })}
-            </p>
-
-            {/* Story Description */}
-            <p className="text-[#171415] text-2xl leading-8 mb-6 newsreader-400">
-              {story.description}
-            </p>
-
-            {/* Story Tags */}
-            <div className="flex flex-wrap gap-2 mb-5">
-              {story.story_tags?.map(({ tags }) => (
-                <span
-                  key={tags.name}
-                  className="px-4 py-2 bg-[#faf9f5] text-[#171415] rounded-full text-sm newsreader-400 border border-[#e4d9cb]"
-                >
-                  {tags.icon} {tags.name}
-                </span>
-              ))}
-            </div>
-
-            {/* Story Header */}
-            <div className="relative h-[300px] sm:h-[400px] md:h-[500px] mb-8">
-              <Image
-                src={story.thumbnail_url || "/placeholder.svg"}
-                alt={story.title}
-                fill
-                className="object-cover rounded-lg"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 sm:p-8 md:p-12 flex flex-col justify-end">
-                <div className="flex flex-wrap gap-2">
-                  {story.story_tags?.map(({ tags }) => (
-                    <span
-                      key={tags.name}
-                      className="px-3 py-1 bg-white/20 text-white rounded-full text-sm newsreader-400"
-                    >
-                      {tags.icon} {tags.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Story Content */}
-            <div className="p-6 sm:p-8 md:p-12">
-              <div className="prose max-w-none">
-                {story.transcript_question && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-medium text-[#171415] mb-4 newsreader-500">
-                      Question
-                    </h2>
-                    <p className="text-[#171415]/80 newsreader-400">
-                      {story.transcript_question}
-                    </p>
-                  </div>
-                )}
-
-                {story.transcript_answer && (
-                  <div className="mb-8">
-                    <h2 className="text-xl font-medium text-[#171415] mb-4 newsreader-500">
-                      Answer
-                    </h2>
-                    <p className="text-[#171415]/80 newsreader-400">
-                      {story.transcript_answer}
-                    </p>
-                  </div>
-                )}
-
-                {story.audio_url && (
-                  <div className="mt-8">
-                    <h2 className="text-xl font-medium text-[#171415] mb-4 newsreader-500">
-                      Listen to the Story
-                    </h2>
-                    <audio
-                      controls
-                      className="w-full"
-                      src={story.audio_url}
-                    >
-                      Your browser does not support the audio element.
-                    </audio>
-                  </div>
-                )}
-
-                {/* Comments Section */}
-                <div className="mt-16">
-                  <h2 className="text-2xl font-bold text-[#171415] mb-8 fraunces-400">Comments</h2>
-                  
-                  {/* Comment Form */}
-                  <form onSubmit={handleSubmitComment} className="mb-12">
-                    <textarea
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      placeholder="Share your thoughts..."
-                      className="w-full h-32 p-4 border border-[#e4d9cb] rounded-lg focus:outline-none focus:border-[#b15e4e] resize-none newsreader-400"
-                    />
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={isSubmitting || !newComment.trim()}
-                        className={`inline-block border-2 border-[#171415] text-[#171415] px-6 py-3 rounded-md transition-colors hover:bg-[#faf9f5] instrument-400 ${
-                          isSubmitting || !newComment.trim()
-                            ? 'bg-[#e4d9cb]/60 text-[#c6af96] border-0'
-                            : ''
-                        }`}
-                      >
-                        {isSubmitting ? 'Posting...' : 'Post Comment'}
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Comments List */}
-                  <div className="space-y-8">
-                    {comments.map((comment) => (
-                      <div key={comment.id} className="border-b border-[#e4d9cb] pb-8 last:border-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-medium text-[#171415] fraunces-400">
-                            {comment.profiles?.full_name || 'Anonymous'}
-                          </span>
-                          <span className="text-[#171415]/40 text-sm newsreader-400">
-                            • {new Date(comment.created_at).toLocaleDateString('en-US', {
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                          </span>
-                        </div>
-                        <p className="text-[#171415] newsreader-400">{comment.content}</p>
-                      </div>
-                    ))}
-                    {comments.length === 0 && (
-                      <p className="text-[#171415]/60 text-center newsreader-400">
-                        No comments yet. Be the first to share your thoughts!
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
+      <main className="pt-16">
+        <StoryContent storyId={storyId} />
       </main>
       <Footer />
     </div>

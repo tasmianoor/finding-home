@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { HomeIcon, ArrowUp, X, Menu } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import MainNav from "./components/MainNav"
 import ImageCarousel from "./components/ImageCarousel"
@@ -14,6 +14,7 @@ export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showSignOutNotification, setShowSignOutNotification] = useState(false)
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -21,7 +22,25 @@ export default function Home() {
   })
 
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    // Check for sign out parameter
+    if (searchParams.get('signedOut') === 'true') {
+      setShowSignOutNotification(true)
+      // Remove the parameter from the URL without refreshing
+      const newUrl = window.location.pathname
+      window.history.replaceState({}, '', newUrl)
+      
+      // Hide notification after 10 seconds
+      const timer = setTimeout(() => {
+        setShowSignOutNotification(false)
+      }, 10000)
+
+      return () => clearTimeout(timer)
+    }
+  }, [searchParams])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -69,6 +88,20 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       <MainNav />
+
+      {/* Sign Out Notification */}
+      {showSignOutNotification && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 bg-[#faf9f5] border border-[#d97756] rounded-lg shadow-lg px-6 py-3 flex items-center gap-4">
+          <p className="text-[#171415] newsreader-400">You have been signed out successfully.</p>
+          <button
+            onClick={() => setShowSignOutNotification(false)}
+            className="text-[#171415] hover:text-[#d97756] transition-colors"
+            aria-label="Dismiss notification"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Hero Section with Video Background */}
       <section className="relative h-screen w-full overflow-hidden">

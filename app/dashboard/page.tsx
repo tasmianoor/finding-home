@@ -136,6 +136,7 @@ export default function DashboardPage() {
         )
 
         // Fetch bookmarked stories
+        console.log('Fetching bookmarks for user:', session.user.id)
         const { data, error: bookmarksError } = await supabase
           .from('bookmarks')
           .select(`
@@ -156,7 +157,9 @@ export default function DashboardPage() {
 
         if (bookmarksError) {
           console.error('Error fetching bookmarks:', bookmarksError)
+          throw new Error(`Failed to fetch bookmarks: ${bookmarksError.message}`)
         } else if (data) {
+          console.log('Bookmarks fetched successfully:', data)
           const bookmarks = data as unknown as BookmarkJoin[]
           const stories = bookmarks.map(bookmark => ({
             ...bookmark.stories,
@@ -286,8 +289,12 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d97756]"></div>
+      <div className="min-h-screen bg-[#faf9f5] flex flex-col">
+        <MainNav />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d97756]"></div>
+        </main>
+        <Footer />
       </div>
     )
   }
@@ -311,40 +318,40 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            {/* Suggested story prompts */}
+            {/* Story cards grid */}
             <div className="mt-16 sm:mt-20">
               <h3 className="text-lg sm:text-xl font-semibold text-[#171415] mb-6 text-center newsreader-500">
-                Need inspiration? Here are some prompts to get you started:
+                Explore our stories
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 {[
                   {
-                    title: "Walk down memory lane",
-                    description: "Explore our collection of family stories. Each tale is a window into someone's journey, waiting to inspire your own narrative.",
+                    title: "Family Stories",
+                    description: "Discover and listen to stories shared by family members. Each story is a unique piece of our family's history.",
                     icon: <BookOpen className="h-5 w-5 text-[#d97756] mb-2" />,
                     link: "/stories"
                   },
                   {
-                    title: "Make yourself known",
-                    description: "Complete your profile to connect with family members and share your unique perspective. Your story is an important part of the family tapestry.",
+                    title: "Your Profile",
+                    description: "View and manage your profile settings. Keep your information up to date to stay connected with the family.",
                     icon: <User className="h-5 w-5 text-[#d97756] mb-2" />,
                     link: "/profile"
                   },
                   {
-                    title: "Start your story collection",
-                    description: "Begin your journey of preserving family memories. Every story matters, and every moment counts in building your family's legacy.",
+                    title: "Add Memories",
+                    description: "Share your own stories and memories with the family. Your experiences help build our collective history.",
                     icon: <PenLine className="h-5 w-5 text-[#d97756] mb-2" />,
                     link: "/add-memories"
                   }
-                ].map((prompt, index) => (
+                ].map((card, index) => (
                   <Link 
                     key={index}
-                    href={prompt.link}
+                    href={card.link}
                     className="block bg-white p-6 rounded-lg shadow-md hover:shadow-lg border border-[#e4d9cb] hover:border-[#d97756] transition-all duration-200 group hover:-translate-y-1 hover:bg-[#faf9f5]"
                   >
-                    {prompt.icon}
-                    <h4 className="font-medium text-[#171415] mb-2 newsreader-500 group-hover:text-[#d97756] transition-colors">{prompt.title}</h4>
-                    <p className="text-[#171415] text-sm newsreader-400 group-hover:text-[#171415]/80">{prompt.description}</p>
+                    {card.icon}
+                    <h4 className="font-medium text-[#171415] mb-2 newsreader-500 group-hover:text-[#d97756] transition-colors">{card.title}</h4>
+                    <p className="text-[#171415] text-sm newsreader-400 group-hover:text-[#171415]/80">{card.description}</p>
                   </Link>
                 ))}
               </div>
@@ -357,9 +364,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#faf9f5]">
+    <div className="min-h-screen bg-[#faf9f5] flex flex-col">
       <MainNav />
-      <main className="pt-16">
+      <main className="flex-1 pt-16">
         {featuredStory && (
           <section className="bg-[#faf9f5] py-8 sm:py-12 md:py-16">
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -368,7 +375,7 @@ export default function DashboardPage() {
                   <div className="inline-block bg-[#faf9f5] px-3 sm:px-4 py-1 rounded-md">
                     <span className="font-medium text-[#d97756] text-sm sm:text-base newsreader-500">NEW STORY</span>
                   </div>
-                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] newsreader-500">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] fraunces-400">
                     Episode {featuredStory.episode_number}:
                     <br />
                     {featuredStory.title}
@@ -378,7 +385,7 @@ export default function DashboardPage() {
                   </p>
                   <Link 
                     href={`/stories/${featuredStory.id}`}
-                    className="inline-block bg-[#d97756] hover:bg-[#c06645] text-white px-4 sm:px-6 py-2 sm:py-3 rounded-md transition-colors text-sm sm:text-base"
+                    className="inline-block bg-[#171415] hover:bg-[#171415]/90 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-md transition-colors text-sm sm:text-base instrument-400"
                   >
                     Listen now
                   </Link>
@@ -386,16 +393,11 @@ export default function DashboardPage() {
                 <div className="relative mt-6 lg:mt-0">
                   <div className="bg-[#faf9f5] absolute inset-0 rounded-lg transform translate-x-2 sm:translate-x-4 translate-y-2 sm:translate-y-4"></div>
                   <img
-                    src={featuredStory.thumbnail_url || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%202025-04-28%20at%201.51.26%E2%80%AFPM-xgi0cRm6JvFkfNSM7Awgf85UKmY2G5.png"}
+                    src={featuredStory.thumbnail_url || "/placeholder.svg"}
                     alt={featuredStory.title}
                     className="relative z-10 rounded-md w-full h-auto"
                   />
                 </div>
-              </div>
-              <div className="flex justify-end mt-6 sm:mt-8">
-                <Link href="/stories" className="text-sm sm:text-base text-[#171415] hover:text-[#d97756] font-medium newsreader-400">
-                  Browse all stories &gt;
-                </Link>
               </div>
             </div>
           </section>
@@ -404,7 +406,7 @@ export default function DashboardPage() {
         {recentStories.length > 0 && (
           <section className="bg-white py-12">
             <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 md:mb-12 text-[#171415] newsreader-500">Pick up where you left off</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 md:mb-12 text-[#171415] fraunces-400">Pick up where you left off</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {recentStories.map((story) => (
                   <Link key={story.id} href={`/stories/${story.id}`} className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200">
@@ -417,15 +419,15 @@ export default function DashboardPage() {
                     </div>
                     <div className="relative">
                       <img
-                        src={story.thumbnail_url || "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/attachments/gen-images/public/group-photo-bw-8xoDT2qVby6YYBsxpg4BtnJUvLLKoZ.png"}
+                        src={story.thumbnail_url || "/placeholder.svg"}
                         alt={story.title}
                         className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                       />
-                      <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 p-6 flex flex-col justify-end transition-all duration-300">
-                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3 newsreader-500">
-                          Ep.{story.episode_number}
+                      <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
+                          {story.title}
                         </h3>
-                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400">
+                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
                           {story.description}
                         </p>
                         <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
@@ -450,7 +452,7 @@ export default function DashboardPage() {
         {bookmarkedStories.length > 0 && (
           <section className="bg-[#faf9f5] py-12">
             <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-8 sm:mb-12 md:mb-16 text-[#171415] newsreader-500">Saved by you</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-8 sm:mb-12 md:mb-16 text-[#171415] fraunces-400">Saved by you</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {bookmarkedStories.map((story) => (
                   <Link key={story.id} href={`/stories/${story.id}`} className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200">
@@ -467,11 +469,11 @@ export default function DashboardPage() {
                         alt={story.title}
                         className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                       />
-                      <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 p-6 flex flex-col justify-end transition-all duration-300">
-                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3 newsreader-500">
-                          Ep.{story.episode_number}
+                      <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
+                          {story.title}
                         </h3>
-                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400">
+                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
                           {story.description}
                         </p>
                         <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
@@ -493,10 +495,9 @@ export default function DashboardPage() {
         {latestStories.length > 0 && (
           <section className="bg-white py-12">
             <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-8 sm:mb-12 md:mb-16 text-[#171415] newsreader-500">Latest buzz</h2>
               <div className="mb-12">
-                <div className="flex justify-between items-center mb-6 sm:mb-8">
-                  <h3 className="text-xl sm:text-2xl font-bold text-[#171415] newsreader-500">Stories</h3>
+                <div className="flex justify-between items-end mb-6 sm:mb-8">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#171415] fraunces-400">Latest Buzz</h2>
                   <p className="text-sm text-[#171415] newsreader-400">
                     Showing {latestStories.length} of {totalStories} stories
                   </p>
@@ -517,11 +518,11 @@ export default function DashboardPage() {
                           alt={story.title}
                           className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                         />
-                        <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 p-6 flex flex-col justify-end transition-all duration-300">
-                          <h3 className="text-white text-2xl sm:text-3xl md:text-4xl font-bold mb-2 sm:mb-3 newsreader-500">
+                        <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                          <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                             {story.title}
                           </h3>
-                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400">
+                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
                             {story.description}
                           </p>
                           <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
@@ -541,10 +542,10 @@ export default function DashboardPage() {
                     <button
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                       disabled={currentPage === 1}
-                      className={`px-4 py-2 rounded-md text-sm newsreader-400 ${
+                      className={`px-4 py-2 rounded-md text-sm transition-colors instrument-400 ${
                         currentPage === 1
                           ? 'bg-[#faf9f5] text-[#171415]/40 cursor-not-allowed'
-                          : 'bg-white text-[#171415] hover:bg-[#faf9f5]'
+                          : 'bg-white text-[#171415] hover:bg-[#faf9f5] border border-[#e4d9cb] hover:border-[#171415]'
                       }`}
                     >
                       Previous
@@ -553,10 +554,10 @@ export default function DashboardPage() {
                       <button
                         key={page}
                         onClick={() => setCurrentPage(page)}
-                        className={`px-4 py-2 rounded-md text-sm newsreader-400 ${
+                        className={`px-4 py-2 rounded-md text-sm transition-colors instrument-400 ${
                           currentPage === page
-                            ? 'bg-[#d97756] text-white'
-                            : 'bg-white text-[#171415] hover:bg-[#faf9f5]'
+                            ? 'bg-[#171415] text-white hover:bg-[#171415]/90'
+                            : 'bg-white text-[#171415] hover:bg-[#faf9f5] border border-[#e4d9cb] hover:border-[#171415]'
                         }`}
                       >
                         {page}
@@ -565,16 +566,24 @@ export default function DashboardPage() {
                     <button
                       onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                       disabled={currentPage === totalPages}
-                      className={`px-4 py-2 rounded-md text-sm newsreader-400 ${
+                      className={`px-4 py-2 rounded-md text-sm transition-colors instrument-400 ${
                         currentPage === totalPages
                           ? 'bg-[#faf9f5] text-[#171415]/40 cursor-not-allowed'
-                          : 'bg-white text-[#171415] hover:bg-[#faf9f5]'
+                          : 'bg-white text-[#171415] hover:bg-[#faf9f5] border border-[#e4d9cb] hover:border-[#171415]'
                       }`}
                     >
                       Next
                     </button>
                   </div>
                 )}
+              </div>
+              <div className="mt-8 flex justify-center">
+                <Link 
+                  href="/stories" 
+                  className="inline-block border-2 border-[#171415] text-[#171415] px-6 py-3 rounded-md transition-colors hover:bg-[#faf9f5] instrument-400"
+                >
+                  Browse all stories
+                </Link>
               </div>
             </div>
           </section>

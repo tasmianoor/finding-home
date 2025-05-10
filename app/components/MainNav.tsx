@@ -1,19 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Menu } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { HomeIcon, PlusCircle, Bookmark, PenLine } from "lucide-react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 export default function MainNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isSignedIn, setIsSignedIn] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsSignedIn(!!session)
+    }
+    checkSession()
+  }, [supabase.auth])
+
+  const handleHomeClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (isSignedIn) {
+      router.push('/dashboard')
+    } else {
+      router.push('/')
+    }
+  }
 
   return (
     <header className="bg-white flex justify-between items-center px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-50 shadow-sm">
-      <Link href="/" className="flex items-center gap-2">
+      <Link href={isSignedIn ? "/dashboard" : "/"} onClick={handleHomeClick} className="flex items-center gap-2">
         <Image
           src="/logos/logo-orange.png"
           alt="Finding Home Logo"

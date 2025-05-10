@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { Upload, BookOpen } from 'lucide-react'
 import MainNav from '../components/MainNav'
 import Footer from '../components/Footer'
+import Link from 'next/link'
 
 interface Profile {
   id: string
@@ -22,9 +23,13 @@ interface Profile {
 interface Story {
   id: string
   title: string
+  description: string
   content: string
+  status: string
   created_at: string
-  status: 'draft' | 'submitted' | 'published'
+  updated_at: string
+  thumbnail_url: string | null
+  user_id: string
 }
 
 export default function ProfilePage() {
@@ -368,7 +373,7 @@ export default function ProfilePage() {
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[#d97756]">
                       <span className="text-5xl font-medium">
-                        {editedProfile.full_name?.charAt(0) || '?'}
+                        {editedProfile.full_name && editedProfile.full_name.length > 0 ? editedProfile.full_name.charAt(0) : '?'}
                       </span>
                     </div>
                   )}
@@ -387,14 +392,14 @@ export default function ProfilePage() {
                   {profile.avatar_url ? (
                     <Image
                       src={profile.avatar_url}
-                      alt={profile.full_name}
+                      alt={profile.full_name || 'Profile'}
                       fill
                       className="object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-[#d97756]">
                       <span className="text-5xl font-medium">
-                        {profile.full_name?.charAt(0) || '?'}
+                        {profile.full_name && profile.full_name.length > 0 ? profile.full_name.charAt(0) : '?'}
                       </span>
                     </div>
                   )}
@@ -521,36 +526,29 @@ export default function ProfilePage() {
                   <BookOpen className="h-6 w-6 text-[#d97756]" />
                   My Shared Memories
                 </h2>
-                <div className="grid gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {stories.map((story) => (
-                    <div key={story.id} className="bg-[#faf9f5] border border-[#e4d9cb] rounded-lg p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-xl font-medium text-[#171415] newsreader-500">
-                          {story.title}
-                        </h3>
-                        <span className={`px-3 py-1 rounded-full text-sm ${
-                          story.status === 'published' ? 'bg-green-100 text-green-800' :
-                          story.status === 'submitted' ? 'bg-blue-100 text-blue-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {story.status.charAt(0).toUpperCase() + story.status.slice(1)}
-                        </span>
+                    <Link 
+                      key={story.id} 
+                      href={`/stories/${story.id}`} 
+                      className="group cursor-pointer relative"
+                    >
+                      <div className="relative h-64 overflow-hidden rounded-lg">
+                        <img
+                          src={story.thumbnail_url || "/placeholder.svg"}
+                          alt={story.title}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 flex flex-col justify-end">
+                          <h3 className="text-white text-xl font-bold mb-2 newsreader-500">
+                            {story.title}
+                          </h3>
+                          <p className="text-white/80 text-sm newsreader-400">
+                            {story.description}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-[#171415]/80 mb-4 line-clamp-3 newsreader-400">
-                        {story.content}
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <p className="text-sm text-[#171415]/40 newsreader-400">
-                          Submitted on {new Date(story.created_at).toLocaleDateString()}
-                        </p>
-                        <button
-                          onClick={() => router.push(`/stories/${story.id}`)}
-                          className="text-[#d97756] hover:text-[#d97756]/80 transition-colors newsreader-400"
-                        >
-                          Read more →
-                        </button>
-                      </div>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>

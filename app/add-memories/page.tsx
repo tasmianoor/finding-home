@@ -2,7 +2,7 @@
 
 import type React from "react"
 import Link from "next/link"
-import { HomeIcon, PlusCircle, Upload, Loader2, X } from "lucide-react"
+import { HomeIcon, PlusCircle, Upload, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
@@ -36,8 +36,13 @@ export default function AddMemoriesPage() {
   const [selectedVisibility, setSelectedVisibility] = useState<string[]>([])
   const [files, setFiles] = useState<File[]>([])
   const [mediaPreviews, setMediaPreviews] = useState<MediaPreview[]>([])
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [transcriptQuestion, setTranscriptQuestion] = useState("")
+  const [transcriptAnswer, setTranscriptAnswer] = useState("")
+  const [success, setSuccess] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -135,272 +140,290 @@ export default function AddMemoriesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError(null)
+    setSuccess(null)
+    setIsSubmitting(true)
 
     if (selectedVisibility.length === 0) {
       setError('Please select who can see this post')
-      setIsLoading(false)
+      setIsSubmitting(false)
       return
     }
 
     try {
-      // Check authentication
+      // Check if user is authenticated
       const { data: { session }, error: authError } = await supabase.auth.getSession()
-      if (authError) {
-        console.error('Authentication error:', authError)
-        setError('Authentication error. Please try signing in again.')
-        router.push('/signin')
-        return
-      }
-      if (!session) {
-        console.error('No session found')
-        setError('Please sign in to create a story')
-        router.push('/signin')
-        return
-      }
+      if (authError) throw new Error(`Authentication error: ${authError.message}`)
+      if (!session) throw new Error('No active session found')
 
-      console.log('User authenticated:', session.user.id)
-
-      // First check if user has a profile and is verified
+      // Check if user has a profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('id, is_family_verified, username, full_name')
+        .select('*')
         .eq('id', session.user.id)
         .single()
 
-      if (profileError) {
-        console.error('Profile check error details:', {
-          message: profileError.message,
-          details: profileError.details,
-          hint: profileError.hint,
-          code: profileError.code
-        })
+      if (profileError) throw new Error(`Profile error: ${profileError.message}`)
+      if (!profile) throw new Error('No profile found for user')
 
-        // If profile doesn't exist, create one
-        if (profileError.code === 'PGRST116') {
-          console.log('Profile not found, creating new profile...')
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: session.user.id,
-              username: session.user.email?.split('@')[0] || 'user',
-              full_name: session.user.user_metadata?.full_name || 'New User',
-              is_family_verified: false,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .select()
-            .single()
+      // Check if database is connected
+      const { error: dbError } = await supabase.from('stories').select('count').limit(1)
+      if (dbError) throw new Error(`Database connection error: ${dbError.message}`)
 
-          if (createError) {
-            console.error('Error creating profile:', createError)
-            setError('Failed to create profile. Please try again.')
-            return
-          }
-
-          console.log('New profile created:', newProfile)
-          setError('Your profile has been created, but needs to be verified before you can create stories.')
-          return
-        }
-
-        setError('Error checking profile. Please try again.')
-        return
-      }
-
-      if (!profile) {
-        console.error('No profile found')
-        setError('Please complete your profile setup first')
-        return
-      }
-
-      if (!profile.is_family_verified) {
-        console.error('User not verified')
-        setError('Your account needs to be verified before you can create stories')
-        return
-      }
-
-      console.log('Profile verified:', profile)
-
-      // Verify Supabase connection and schema
-      const { data: testData, error: testError } = await supabase
-        .from('stories')
-        .select('id, user_id')
-        .limit(1)
-
-      if (testError) {
-        console.error('Supabase connection test failed:', testError)
-        setError('Database connection error. Please try again.')
-        return
-      }
-      console.log('Supabase connection test successful')
-
-      // Log the data we're trying to insert
+      // Create the story first
       const storyData = {
-        user_id: profile.id,
+        user_id: session.user.id,
         title,
         description,
-        episode_number: 1,
-        audio_url: '',
-        thumbnail_url: '',
-        transcript_question: '',
-        transcript_answer: '',
-        duration: 'PT0S',
-        is_published: false,
+        thumbnail_url: mediaPreviews.find(p => p.type.startsWith('image/'))?.url || '',
+        audio_url: mediaPreviews.find(p => p.type.startsWith('audio/'))?.url || '',
+        transcript_question: transcriptQuestion,
+        transcript_answer: transcriptAnswer,
+        duration: 'PT0S', // Default duration
+        is_published: true, // Set to true by default
         view_count: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }
-      console.log('Attempting to insert story with data:', storyData)
 
-      // First create the story to get the ID
+      console.log('Creating story with data:', storyData)
+
       const { data: story, error: storyError } = await supabase
         .from('stories')
-        .insert([storyData])  // Wrap in array to ensure proper format
+        .insert([storyData])
         .select()
+        .single()
 
       if (storyError) {
-        console.error('Raw story error:', storyError)
-        console.error('Story creation error details:', {
-          message: storyError.message,
-          details: storyError.details,
-          hint: storyError.hint,
-          code: storyError.code,
-          error: storyError
-        })
-        setError(`Failed to create story: ${storyError.message || 'Unknown error'}`)
-        return
+        console.error('Story creation error:', storyError)
+        throw new Error(`Failed to create story: ${storyError.message}`)
       }
 
-      if (!story || story.length === 0) {
-        console.error('No story data returned after insert')
-        setError('Failed to create story: No data returned')
-        return
+      if (!story) {
+        throw new Error('No story data returned after creation')
       }
 
       console.log('Story created successfully:', story)
-      const createdStory = story[0]
 
       // Add visibility options
-      const visibilityPromises = selectedVisibility.map(async (visibility) => {
+      try {
+        const visibilityData = {
+          story_id: story.id,
+          visibility_type: selectedVisibility[0].toLowerCase().replace(/\s+/g, '_'),
+          created_at: new Date().toISOString()
+        }
+
+        console.log('Adding visibility options:', visibilityData)
+
         const { error: visibilityError } = await supabase
           .from('story_visibility')
-          .insert({
-            story_id: createdStory.id,
-            visibility_type: visibility.toLowerCase().replace(/\s+/g, '_')
-          })
+          .insert([visibilityData])
 
         if (visibilityError) {
-          console.error('Error adding visibility:', visibilityError)
-          throw visibilityError
+          console.error('Visibility error:', visibilityError)
+          throw new Error(`Failed to set visibility: ${visibilityError.message}`)
         }
-      })
-
-      await Promise.all(visibilityPromises)
-      console.log('Visibility options added:', selectedVisibility)
-
-      // Upload files
-      const uploadPromises = files.map(async (file) => {
-        const fileExt = file.name.split('.').pop()?.toLowerCase() || ''
-        const fileName = `${createdStory.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
-        const filePath = `${file.type.startsWith('image/') ? 'images' : 'audio'}/${fileName}`
-
-        const { error: uploadError } = await supabase.storage
-          .from('stories')
-          .upload(filePath, file)
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError)
-          throw uploadError
-        }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('stories')
-          .getPublicUrl(filePath)
-
-        return {
-          type: file.type,
-          url: publicUrl
-        }
-      })
-
-      const uploadedFiles = await Promise.all(uploadPromises)
-      console.log('Files uploaded:', uploadedFiles)
-      
-      // Update story with media URLs
-      const thumbnailUrl = uploadedFiles.find(f => f.type.startsWith('image/'))?.url || 
-        'https://gfnfawmtebnndhundozy.supabase.co/storage/v1/object/sign/stories/Audio-story.png?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InN0b3JhZ2UtdXJsLXNpZ25pbmcta2V5XzY5ZWUzYjBjLTVmNDAtNGFlYy05MWRkLTg4ODgyMTQxOWU4YSJ9.eyJ1cmwiOiJzdG9yaWVzL0F1ZGlvLXN0b3J5LnBuZyIsImlhdCI6MTc0Njg4NzkyNiwiZXhwIjoxNzQ5NDc5OTI2fQ.lfpVpbe1ygfFeT2_d7ydkP6aiGd6oBiN3Q9JpHOVqBM'
-      const audioUrl = uploadedFiles.find(f => f.type.startsWith('audio/'))?.url || ''
-
-      // Calculate duration for audio files if present
-      let duration = '0 seconds'
-      if (files.some(f => f.type.startsWith('audio/'))) {
-        // For now, set a default duration. In a real app, you'd want to calculate this
-        duration = '0 seconds'
+      } catch (error) {
+        console.error('Error adding visibility:', error)
+        throw new Error(`Failed to set visibility: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
 
-      const { error: updateError } = await supabase
-        .from('stories')
-        .update({
-          thumbnail_url: thumbnailUrl,
-          audio_url: audioUrl,
-          duration: duration,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', createdStory.id)
+      // Process file uploads
+      if (files.length > 0) {
+        try {
+          console.log('Starting file upload process...')
+          console.log('Number of files to upload:', files.length)
 
-      if (updateError) {
-        console.error('Story update error:', updateError)
-        throw updateError
+          // Check if storage bucket exists
+          const { data: buckets, error: bucketError } = await supabase
+            .storage
+            .listBuckets()
+
+          if (bucketError) {
+            console.error('Bucket check error:', bucketError)
+            throw new Error(`Failed to check storage buckets: ${bucketError.message}`)
+          }
+
+          const memoriesBucket = buckets?.find(b => b.name === 'memories')
+          if (!memoriesBucket) {
+            console.error('Memories bucket not found, attempting to create it...')
+            const { data: newBucket, error: createError } = await supabase
+              .storage
+              .createBucket('memories', {
+                public: false,
+                fileSizeLimit: 10 * 1024 * 1024 // 10MB
+              })
+
+            if (createError) {
+              console.error('Failed to create memories bucket:', createError)
+              throw new Error(`Failed to create memories bucket: ${createError.message}`)
+            }
+
+            if (!newBucket) {
+              throw new Error('Failed to create memories bucket: No bucket data returned')
+            }
+
+            console.log('Memories bucket created successfully:', newBucket)
+          }
+
+          console.log('Using memories bucket for uploads')
+
+          const uploadPromises = files.map(async (file) => {
+            try {
+              console.log('Processing file:', {
+                name: file.name,
+                type: file.type,
+                size: file.size
+              })
+
+              // Validate file size (10MB limit)
+              if (file.size > 10 * 1024 * 1024) {
+                throw new Error(`File ${file.name} is too large. Maximum size is 10MB.`)
+              }
+
+              const fileType = file.type.startsWith('image/') ? 'images' : 'audio'
+              const filePath = `${fileType}/${Date.now()}_${file.name}`
+
+              console.log('Uploading file to path:', filePath)
+
+              const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('memories')
+                .upload(filePath, file, {
+                  cacheControl: '3600',
+                  upsert: false
+                })
+
+              if (uploadError) {
+                console.error('Upload error details:', {
+                  error: uploadError,
+                  file: file.name,
+                  path: filePath
+                })
+                throw new Error(`Upload failed: ${uploadError.message}`)
+              }
+
+              if (!uploadData) {
+                throw new Error('No upload data returned')
+              }
+
+              console.log('File uploaded successfully:', uploadData)
+
+              const { data: { publicUrl } } = supabase.storage
+                .from('memories')
+                .getPublicUrl(filePath)
+
+              if (!publicUrl) {
+                throw new Error('No public URL generated')
+              }
+
+              console.log('Public URL generated:', publicUrl)
+
+              return {
+                path: filePath,
+                url: publicUrl,
+                type: fileType
+              }
+            } catch (error) {
+              console.error('File processing error:', {
+                error,
+                file: file.name
+              })
+              throw new Error(`Failed to process file ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            }
+          })
+
+          const uploadedFiles = await Promise.all(uploadPromises)
+          console.log('All files uploaded successfully:', uploadedFiles)
+
+          // Filter images and get the first one for thumbnail
+          const images = uploadedFiles.filter(f => f.type === 'images')
+          console.log('Uploaded images:', images)
+
+          const thumbnailUrl = images.length > 0 ? images[0].url : null
+          console.log('Selected thumbnail URL:', thumbnailUrl)
+
+          // Update story with thumbnail
+          if (thumbnailUrl) {
+            const { error: updateError } = await supabase
+              .from('stories')
+              .update({ thumbnail_url: thumbnailUrl })
+              .eq('id', story.id)
+
+            if (updateError) {
+              console.error('Thumbnail update error:', updateError)
+              throw new Error(`Failed to update thumbnail: ${updateError.message}`)
+            }
+          }
+
+          // Add files to story_files
+          const fileRecords = uploadedFiles.map(file => ({
+            story_id: story.id,
+            file_path: file.path,
+            file_type: file.type,
+            created_at: new Date().toISOString()
+          }))
+
+          console.log('Adding file records:', fileRecords)
+
+          const { error: filesError } = await supabase
+            .from('story_files')
+            .insert(fileRecords)
+
+          if (filesError) {
+            console.error('File records error:', filesError)
+            throw new Error(`Failed to add file records: ${filesError.message}`)
+          }
+        } catch (error) {
+          console.error('Upload process error:', error)
+          throw new Error(`Error in file upload process: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
       }
 
-      console.log('Story updated with media URLs:', {
-        thumbnailUrl,
-        audioUrl,
-        duration
-      })
-
-      // Add tags
+      // Add tags if any
       if (selectedTags.length > 0) {
-        const { data: tagData, error: tagQueryError } = await supabase
-          .from('tags')
-          .select('id, name')
-          .in('name', selectedTags)
+        try {
+          const tagRecords = selectedTags.map(tag => ({
+            story_id: story.id,
+            tag_name: tag,
+            created_at: new Date().toISOString()
+          }))
 
-        if (tagQueryError) {
-          console.error('Tag query error:', tagQueryError)
-          throw tagQueryError
-        }
+          console.log('Adding tags:', tagRecords)
 
-        if (tagData && tagData.length > 0) {
-          const tagIds = tagData.map(tag => tag.id)
-          
-          // Insert into story_tags junction table
           const { error: tagError } = await supabase
             .from('story_tags')
-            .insert(
-              tagIds.map(tagId => ({
-                story_id: createdStory.id,
-                tag_id: tagId,
-                created_at: new Date().toISOString()
-              }))
-            )
-            
+            .insert(tagRecords)
+
           if (tagError) {
-            console.error('Error adding tags:', tagError)
-          } else {
-            console.log('Tags added successfully:', selectedTags)
+            console.error('Tag error:', tagError)
+            throw new Error(`Failed to add tags: ${tagError.message}`)
           }
+        } catch (error) {
+          console.error('Error adding tags:', error)
+          throw new Error(`Failed to add tags: ${error instanceof Error ? error.message : 'Unknown error'}`)
         }
       }
 
-      router.push('/dashboard')
-    } catch (error) {
-      console.error('Error:', error)
-      setError('Failed to create story. Please try again.')
+      setSuccess('Story created successfully!')
+      router.push(`/stories/${story.id}`)
+    } catch (err) {
+      console.error('Error in handleSubmit:', err)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
+  }
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => 
+      prev === mediaPreviews.filter(p => p.type.startsWith('image/')).length - 1 ? 0 : prev + 1
+    )
+  }
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => 
+      prev === 0 ? mediaPreviews.filter(p => p.type.startsWith('image/')).length - 1 : prev - 1
+    )
   }
 
   return (
@@ -531,12 +554,12 @@ export default function AddMemoriesPage() {
                             return [...prev, option]
                           })
                         }}
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
                           selectedVisibility.includes(option)
                             ? "bg-amber-100 border-amber-300 text-amber-800"
                             : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                        } transition-colors ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } transition-colors ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {option}
                       </button>
@@ -565,12 +588,12 @@ export default function AddMemoriesPage() {
                         key={tag}
                         type="button"
                         onClick={() => toggleTag(tag)}
-                        disabled={isLoading}
+                        disabled={isSubmitting}
                         className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
                           selectedTags.includes(tag)
                             ? "bg-amber-100 border-amber-300 text-amber-800"
                             : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
-                        } transition-colors ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } transition-colors ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {tag}
                       </button>
@@ -584,12 +607,18 @@ export default function AddMemoriesPage() {
                   </p>
                 )}
 
+                {success && (
+                  <p className="text-[#171415] text-sm newsreader-400">
+                    {success}
+                  </p>
+                )}
+
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                   className="w-full bg-[#171415] text-[#faf9f5] py-3 px-4 rounded-md hover:bg-[#171415]/90 transition-colors newsreader-400"
                 >
-                  {isLoading ? 'Saving...' : 'Save Memory'}
+                  {isSubmitting ? 'Saving...' : 'Save Memory'}
                 </button>
               </form>
             </div>
@@ -604,12 +633,108 @@ export default function AddMemoriesPage() {
                     {title}
                   </h3>
                 )}
+                {mediaPreviews.length > 0 && (
+                  <div className="mb-6">
+                    {/* Show images in slideshow if there are multiple images */}
+                    {mediaPreviews.some(p => p.type.startsWith('image/')) && (
+                      <div className="relative group mb-4">
+                        {mediaPreviews
+                          .filter(p => p.type.startsWith('image/'))
+                          .map((preview, index) => (
+                            <div
+                              key={index}
+                              className={`w-full transition-opacity duration-300 ${
+                                index === currentImageIndex ? 'opacity-100' : 'opacity-0 absolute top-0 left-0'
+                              }`}
+                            >
+                              <img
+                                src={preview.url}
+                                alt="Preview"
+                                className="w-full h-auto rounded-lg object-cover"
+                              />
+                            </div>
+                          ))}
+                        {mediaPreviews.filter(p => p.type.startsWith('image/')).length > 1 && (
+                          <>
+                            <button
+                              onClick={prevImage}
+                              className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <ChevronLeft className="h-6 w-6" />
+                            </button>
+                            <button
+                              onClick={nextImage}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <ChevronRight className="h-6 w-6" />
+                            </button>
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                              {mediaPreviews
+                                .filter(p => p.type.startsWith('image/'))
+                                .map((_, idx) => (
+                                  <div
+                                    key={idx}
+                                    className={`w-2 h-2 rounded-full ${
+                                      idx === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                                    }`}
+                                  />
+                                ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Show other media types */}
+                    {mediaPreviews
+                      .filter(p => !p.type.startsWith('image/'))
+                      .map((preview, index) => (
+                        <div key={index} className="mb-4 last:mb-0">
+                          {preview.type.startsWith('audio/') ? (
+                            <div className="w-full p-4 bg-[#faf9f5] rounded-lg">
+                              <audio controls className="w-full">
+                                <source src={preview.url} type={preview.type} />
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          ) : preview.type.startsWith('video/') ? (
+                            <div className="w-full">
+                              <video controls className="w-full rounded-lg">
+                                <source src={preview.url} type={preview.type} />
+                                Your browser does not support the video element.
+                              </video>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                  </div>
+                )}
                 {description && (
                   <p className="text-[#171415]/80 whitespace-pre-wrap newsreader-400">
                     {description}
                   </p>
                 )}
-                {!title && !description && (
+                {transcriptQuestion && (
+                  <div className="mt-6 p-4 bg-[#faf9f5] rounded-lg">
+                    <h4 className="text-lg font-medium text-[#171415] mb-2 newsreader-500">
+                      Question
+                    </h4>
+                    <p className="text-[#171415]/80 newsreader-400">
+                      {transcriptQuestion}
+                    </p>
+                  </div>
+                )}
+                {transcriptAnswer && (
+                  <div className="mt-4 p-4 bg-[#faf9f5] rounded-lg">
+                    <h4 className="text-lg font-medium text-[#171415] mb-2 newsreader-500">
+                      Answer
+                    </h4>
+                    <p className="text-[#171415]/80 newsreader-400">
+                      {transcriptAnswer}
+                    </p>
+                  </div>
+                )}
+                {!title && !description && !mediaPreviews.length && !transcriptQuestion && !transcriptAnswer && (
                   <p className="text-[#171415]/40 newsreader-400">
                     Your preview will appear here as you type
                   </p>

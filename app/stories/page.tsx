@@ -71,7 +71,7 @@ export default function StoriesPage() {
           console.error('Not authenticated:', authError)
           return
         }
-
+        
         // Build the query
         let query = supabase
           .from('stories')

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { HomeIcon, ArrowUp, X, Menu, ChevronDown } from "lucide-react"
+import { HomeIcon, ArrowUp, X, Menu, ChevronDown, KeyRound, Users, Share2, Clock } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -140,14 +140,14 @@ export default function Home() {
 
         {/* Content */}
         <div className="relative z-10 h-full flex items-center justify-center">
-          <div className="text-center">
+          <div className="text-center h-fit">
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 md:mb-6 fraunces-400" style={{ fontSize: "60px" }}>Finding Home</h1>
             <p className="text-xl md:text-2xl text-white mb-6 md:mb-8 leading-tight newsreader-200" style={{ fontSize: "36px", lineHeight: "44px", letterSpacing: "0.05em" }}>
               <strong>A collection of cherished stories of people who matter the most</strong>
-              </p>
-              <div>
-              <a href="#join-form" className="btn-primary" style={{ fontSize: "22px", fontWeight: "300" }}>
-                Get access to memories today
+            </p>
+            <div style={{ marginTop: "20px" }}>
+              <a href="#join-form" className="btn-primary" style={{ fontSize: "18px", fontWeight: "300" }}>
+                Join your family
               </a>
             </div>
           </div>
@@ -179,29 +179,41 @@ export default function Home() {
       </section>
 
       {/* How It Works Section */}
-      <section className="bg-white py-12 md:py-16">
+      <section className="bg-[#faf9f5] py-12 md:py-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-12">
           <h2 className="text-2xl md:text-3xl font-medium text-[#171415] fraunces-400">How it works</h2>
             <div className="md:col-span-3 text-[#171415] space-y-6 md:space-y-10">
-              <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
-                1. Request Access </p>
-              <p className="text-base md:text-lg leading-relaxed newsreader-300" style={{ fontSize: "20px", lineHeight: "28px", marginTop: "20px" }}>
+              <div className="flex items-center gap-3">
+                <KeyRound className="h-6 w-6 text-[#d97756]" />
+                <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
+                 Request Access </p>
+              </div>
+              <p className="text-base md:text-lg leading-relaxed newsreader-400 pl-9" style={{ fontSize: "20px", lineHeight: "28px", marginTop: "20px" }}>
               To keep your family stories private and secure, Finding Home is invitation-only. Simply request access through our homepage, and we'll help you get started.</p>
 
-              <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
-              2. Explore & interact </p>
-              <p className="text-base md:text-lg leading-relaxed newsreader-300" style={{ fontSize: "20px", marginTop: "20px" }}>
+              <div className="flex items-center gap-3">
+                <Users className="h-6 w-6 text-[#d97756]" />
+                <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
+                 Explore & interact </p>
+              </div>
+              <p className="text-base md:text-lg leading-relaxed newsreader-400 pl-9" style={{ fontSize: "20px", marginTop: "20px" }}>
               Family members can watch, listen to, and comment on each story. Start conversations, ask questions, and add details that make the memories even richer.</p>
 
-              <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
-                3. Share your own stories</p>
-              <p className="text-base md:text-lg leading-relaxed newsreader-300" style={{ fontSize: "20px", marginTop: "20px" }}>
+              <div className="flex items-center gap-3">
+                <Share2 className="h-6 w-6 text-[#d97756]" />
+                <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
+                 Share your own stories</p>
+              </div>
+              <p className="text-base md:text-lg leading-relaxed newsreader-400 pl-9" style={{ fontSize: "20px", marginTop: "20px" }}>
               Upload videos of Grandpa telling his favorite jokes, audio of Mom sharing her childhood memories, or photos from family reunions with the stories behind them.</p>
 
-              <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
-                4 Preserve the future </p>
-              <p className="text-base md:text-lg leading-relaxed newsreader-300" style={{ fontSize: "20px", marginTop: "20px" }}>
+              <div className="flex items-center gap-3">
+                <Clock className="h-6 w-6 text-[#d97756]" />
+                <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px"}}>
+                 Preserve the future </p>
+              </div>
+              <p className="text-base md:text-lg leading-relaxed newsreader-400 pl-9" style={{ fontSize: "20px", marginTop: "20px" }}>
               All stories are safely stored and organized, creating a living history that grows with each new addition. Future generations will thank you for saving these precious memories.</p>
             </div>
           </div>
@@ -215,7 +227,7 @@ export default function Home() {
       <section id="join-form" className="py-16 md:py-24 bg-[#faf9f5]">
         
           <h2 className="text-3xl md:text-4xl font-medium text-[#171415] mb-8 md:mb-12 text-center fraunces-400">
-            Get access to memories today
+            Join your family
           </h2>
           <div className="max-w-lg mx-auto px-4 sm:px-6">
           <div className="mb-6 md:mb-8">
@@ -227,7 +239,7 @@ export default function Home() {
           </div>
 
           {error && (
-            <div className="mb-6 bg-red-50 text-red-700 p-3 rounded-md text-sm newsreader-300">
+            <div className="mb-6 bg-[#faf9f5] text-[#d97756] p-3 rounded-md text-sm newsreader-300">
               {error}
             </div>
           )}

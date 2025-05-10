@@ -45,14 +45,17 @@ export default function ImageCarousel() {
     let scrollAmount = 0
     const scrollSpeed = 1 // pixels per frame
     const scrollInterval = 30 // milliseconds
+    const maxScroll = scrollContainer.scrollWidth / 2
 
     const scroll = () => {
       if (!isPaused && scrollContainer) {
         scrollAmount += scrollSpeed
-        if (scrollAmount >= scrollContainer.scrollWidth / 2) {
+        if (scrollAmount >= maxScroll) {
           scrollAmount = 0
+          scrollContainer.scrollLeft = 0
+        } else {
+          scrollContainer.scrollLeft = scrollAmount
         }
-        scrollContainer.scrollLeft = scrollAmount
       }
     }
 
@@ -71,7 +74,6 @@ export default function ImageCarousel() {
       <div 
         ref={scrollRef}
         className="flex gap-4 overflow-x-hidden"
-        style={{ scrollBehavior: 'smooth' }}
       >
         {images.map((image, index) => (
           <div key={index} className="flex-shrink-0">

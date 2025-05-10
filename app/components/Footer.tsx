@@ -5,7 +5,7 @@ import Image from "next/image"
 
 export default function Footer() {
   return (
-    <footer className="bg-[#171415] text-[#faf9f5] pt-6 pb-14 newsreader-400">
+    <footer className="bg-[#171415] text-[#faf9f5] pt-12 pb-7 newsreader-400">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row justify-between items-start">
         <div className="flex flex-col items-start mb-4 md:mb-0">
           <div className="flex items-center gap-4">
@@ -23,15 +23,16 @@ export default function Footer() {
               Finding Home
             </span>
           </div>
-          <div className="mt-2 text-[#faf9f5] newsreader-400">
-            For more information, please contact Tasmia Noor at{" "}
-            <a href="mailto:tan50@hsg.harvard.edu" className="text-[#faf9f5] hover:underline newsreader-400">
-              tan50@hsg.harvard.edu
-            </a>
+          <div className="mt-2 text-[#faf9f5] newsreader-400 md:mt-[16px]">
+            <p style={{ fontSize: "20px" }}>For more information, please contact Tasmia Noor at{" "}
+              <a href="mailto:tan50@hsg.harvard.edu" className="text-[#faf9f5] hover:underline newsreader-400">
+                tan50@hsg.harvard.edu
+              </a>
+            </p>
+            <p className="mt-2">Copyright© 2024 | by Tasmia Noor</p>
           </div>
         </div>
-        <div className="text-[#faf9f5] text-left md:text-right md:mt-[72px]">
-          <p>Copyright© 2024 | by Tasmia Noor</p>
+        <div className="text-[#faf9f5] text-left md:text-right flex items-end">
         </div>
       </div>
     </footer>

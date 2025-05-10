@@ -35,7 +35,7 @@ export default function MainNav() {
   }
 
   return (
-    <header className={`flex justify-between px-4 sm:px-6 pr-8 sm:pr-8 py-3 sm:py-4 fixed top-0 left-0 right-0 z-50 ${isHomePage ? 'bg-transparent' : 'bg-white shadow-sm'}`}>
+    <header className={`flex justify-between px-4 sm:px-6 pr-8 sm:pr-8 py-3 sm:py-4 z-50 ${isHomePage ? 'bg-transparent' : 'bg-white shadow-sm'}`}>
       <Link href={isSignedIn ? "/dashboard" : "/"} onClick={handleHomeClick} className="flex items-end gap-2">
         <Image
           src={isHomePage ? "/logos/logo-white.png" : "/logos/logo-orange.png"}

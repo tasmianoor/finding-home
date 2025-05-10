@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { HomeIcon, ArrowUp, X, Menu } from "lucide-react"
+import { HomeIcon, ArrowUp, X, Menu, ChevronDown } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -20,6 +20,7 @@ export default function Home() {
     email: "",
     password: "",
   })
+  const [showArrow, setShowArrow] = useState(true)
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -40,6 +41,13 @@ export default function Home() {
 
       return () => clearTimeout(timer)
     }
+
+    // Hide arrow after 5 seconds
+    const timer = setTimeout(() => {
+      setShowArrow(false)
+    }, 5000)
+
+    return () => clearTimeout(timer)
   }, [searchParams])
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -85,6 +93,11 @@ export default function Home() {
     }))
   }
 
+  const scrollToAbout = () => {
+    const aboutSection = document.getElementById('about')
+    aboutSection?.scrollIntoView({ behavior: 'smooth' })
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
       <MainNav />
@@ -104,7 +117,7 @@ export default function Home() {
       )}
 
       {/* Hero Section with Video Background */}
-      <section className="relative h-screen w-full overflow-hidden">
+      <section className="relative h-screen w-full overflow-hidden -mt-[72px]">
         {/* Video Background */}
         <div className="absolute inset-0 w-full h-full">
           <video
@@ -139,10 +152,17 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* Bobbing Arrow */}
+        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 cursor-pointer" onClick={scrollToAbout}>
+          <div className="relative w-12 h-12 border-2 border-white rounded-full flex items-center justify-center">
+            <ChevronDown className={`h-6 w-6 text-white ${showArrow ? 'animate-bounce' : ''}`} />
+          </div>
+        </div>
       </section>
 
       {/* About Section */}
-      <section className="bg-[#faf9f5] py-12 md:py-16 relative">
+      <section id="about" className="bg-[#faf9f5] py-12 md:py-16 relative">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-12">
             <h2 className="text-2xl md:text-3xl font-medium text-[#171415] fraunces-400">About</h2>

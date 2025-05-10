@@ -47,10 +47,18 @@ export default function AddMemoriesPage() {
   }, [])
 
   const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError) {
+      console.error('Auth check error:', authError)
       router.push('/signin')
+      return
     }
+    if (!session) {
+      console.log('No session found')
+      router.push('/signin')
+      return
+    }
+    console.log('Auth check successful:', session.user.id)
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,43 +147,146 @@ export default function AddMemoriesPage() {
     try {
       // Check authentication
       const { data: { session }, error: authError } = await supabase.auth.getSession()
-      if (authError || !session) {
+      if (authError) {
+        console.error('Authentication error:', authError)
+        setError('Authentication error. Please try signing in again.')
+        router.push('/signin')
+        return
+      }
+      if (!session) {
+        console.error('No session found')
+        setError('Please sign in to create a story')
         router.push('/signin')
         return
       }
 
+      console.log('User authenticated:', session.user.id)
+
+      // First check if user has a profile and is verified
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, is_family_verified, username, full_name')
+        .eq('id', session.user.id)
+        .single()
+
+      if (profileError) {
+        console.error('Profile check error details:', {
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          code: profileError.code
+        })
+
+        // If profile doesn't exist, create one
+        if (profileError.code === 'PGRST116') {
+          console.log('Profile not found, creating new profile...')
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: session.user.id,
+              username: session.user.email?.split('@')[0] || 'user',
+              full_name: session.user.user_metadata?.full_name || 'New User',
+              is_family_verified: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            console.error('Error creating profile:', createError)
+            setError('Failed to create profile. Please try again.')
+            return
+          }
+
+          console.log('New profile created:', newProfile)
+          setError('Your profile has been created, but needs to be verified before you can create stories.')
+          return
+        }
+
+        setError('Error checking profile. Please try again.')
+        return
+      }
+
+      if (!profile) {
+        console.error('No profile found')
+        setError('Please complete your profile setup first')
+        return
+      }
+
+      if (!profile.is_family_verified) {
+        console.error('User not verified')
+        setError('Your account needs to be verified before you can create stories')
+        return
+      }
+
+      console.log('Profile verified:', profile)
+
+      // Verify Supabase connection and schema
+      const { data: testData, error: testError } = await supabase
+        .from('stories')
+        .select('id, user_id')
+        .limit(1)
+
+      if (testError) {
+        console.error('Supabase connection test failed:', testError)
+        setError('Database connection error. Please try again.')
+        return
+      }
+      console.log('Supabase connection test successful')
+
+      // Log the data we're trying to insert
+      const storyData = {
+        user_id: profile.id,
+        title,
+        description,
+        episode_number: 1,
+        audio_url: '',
+        thumbnail_url: '',
+        transcript_question: '',
+        transcript_answer: '',
+        duration: 'PT0S',
+        is_published: false,
+        view_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      console.log('Attempting to insert story with data:', storyData)
+
       // First create the story to get the ID
       const { data: story, error: storyError } = await supabase
         .from('stories')
-        .insert({
-          user_id: session.user.id,
-          title,
-          description,
-          episode_number: 1,
-          audio_url: '',
-          thumbnail_url: '',
-          transcript_question: '',
-          transcript_answer: '',
-          duration: '0 seconds',
-          is_published: true,
-          view_count: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
+        .insert([storyData])  // Wrap in array to ensure proper format
         .select()
-        .single()
 
       if (storyError) {
-        console.error('Story creation error:', storyError)
-        throw storyError
+        console.error('Raw story error:', storyError)
+        console.error('Story creation error details:', {
+          message: storyError.message,
+          details: storyError.details,
+          hint: storyError.hint,
+          code: storyError.code,
+          error: storyError
+        })
+        setError(`Failed to create story: ${storyError.message || 'Unknown error'}`)
+        return
       }
+
+      if (!story || story.length === 0) {
+        console.error('No story data returned after insert')
+        setError('Failed to create story: No data returned')
+        return
+      }
+
+      console.log('Story created successfully:', story)
+      const createdStory = story[0]
 
       // Add visibility options
       const visibilityPromises = selectedVisibility.map(async (visibility) => {
         const { error: visibilityError } = await supabase
           .from('story_visibility')
           .insert({
-            story_id: story.id,
+            story_id: createdStory.id,
             visibility_type: visibility.toLowerCase().replace(/\s+/g, '_')
           })
 
@@ -186,11 +297,12 @@ export default function AddMemoriesPage() {
       })
 
       await Promise.all(visibilityPromises)
+      console.log('Visibility options added:', selectedVisibility)
 
       // Upload files
       const uploadPromises = files.map(async (file) => {
         const fileExt = file.name.split('.').pop()?.toLowerCase() || ''
-        const fileName = `${story.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+        const fileName = `${createdStory.id}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
         const filePath = `${file.type.startsWith('image/') ? 'images' : 'audio'}/${fileName}`
 
         const { error: uploadError } = await supabase.storage
@@ -213,9 +325,11 @@ export default function AddMemoriesPage() {
       })
 
       const uploadedFiles = await Promise.all(uploadPromises)
+      console.log('Files uploaded:', uploadedFiles)
       
       // Update story with media URLs
-      const thumbnailUrl = uploadedFiles.find(f => f.type.startsWith('image/'))?.url || ''
+      const thumbnailUrl = uploadedFiles.find(f => f.type.startsWith('image/'))?.url || 
+        'https://gfnfawmtebnndhundozy.supabase.co/storage/v1/object/sign/stories/Audio-story.png?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InN0b3JhZ2UtdXJsLXNpZ25pbmcta2V5XzY5ZWUzYjBjLTVmNDAtNGFlYy05MWRkLTg4ODgyMTQxOWU4YSJ9.eyJ1cmwiOiJzdG9yaWVzL0F1ZGlvLXN0b3J5LnBuZyIsImlhdCI6MTc0Njg4NzkyNiwiZXhwIjoxNzQ5NDc5OTI2fQ.lfpVpbe1ygfFeT2_d7ydkP6aiGd6oBiN3Q9JpHOVqBM'
       const audioUrl = uploadedFiles.find(f => f.type.startsWith('audio/'))?.url || ''
 
       // Calculate duration for audio files if present
@@ -233,12 +347,18 @@ export default function AddMemoriesPage() {
           duration: duration,
           updated_at: new Date().toISOString()
         })
-        .eq('id', story.id)
+        .eq('id', createdStory.id)
 
       if (updateError) {
         console.error('Story update error:', updateError)
         throw updateError
       }
+
+      console.log('Story updated with media URLs:', {
+        thumbnailUrl,
+        audioUrl,
+        duration
+      })
 
       // Add tags
       if (selectedTags.length > 0) {
@@ -260,7 +380,7 @@ export default function AddMemoriesPage() {
             .from('story_tags')
             .insert(
               tagIds.map(tagId => ({
-                story_id: story.id,
+                story_id: createdStory.id,
                 tag_id: tagId,
                 created_at: new Date().toISOString()
               }))
@@ -268,6 +388,8 @@ export default function AddMemoriesPage() {
             
           if (tagError) {
             console.error('Error adding tags:', tagError)
+          } else {
+            console.log('Tags added successfully:', selectedTags)
           }
         }
       }
@@ -326,6 +448,70 @@ export default function AddMemoriesPage() {
                     className="w-full px-4 py-2 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-2 focus:ring-[#d97756] focus:border-transparent newsreader-400"
                     placeholder="Write your story here..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#171415] mb-2 newsreader-400">
+                    Upload Media
+                  </label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-[#e4d9cb] border-dashed rounded-md">
+                    <div className="space-y-1 text-center">
+                      <Upload className="mx-auto h-12 w-12 text-[#171415]/40" />
+                      <div className="flex text-sm text-[#171415]/60 newsreader-400">
+                        <label
+                          htmlFor="file-upload"
+                          className="relative cursor-pointer bg-white rounded-md font-medium text-[#d97756] hover:text-[#d97756]/90 focus-within:outline-none"
+                        >
+                          <span>Upload files</span>
+                          <input
+                            id="file-upload"
+                            name="file-upload"
+                            type="file"
+                            multiple
+                            accept="image/*,audio/*,video/*"
+                            onChange={handleFileChange}
+                            className="sr-only"
+                          />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-[#171415]/40 newsreader-400">
+                        Images (up to 3), Audio (up to 3), or Video (1)
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Media Previews */}
+                  {mediaPreviews.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {mediaPreviews.map((preview, index) => (
+                        <div key={index} className="relative group">
+                          {preview.type.startsWith('image/') ? (
+                            <img
+                              src={preview.url}
+                              alt="Preview"
+                              className="w-full h-32 object-cover rounded-md"
+                            />
+                          ) : preview.type.startsWith('audio/') ? (
+                            <div className="w-full h-32 bg-[#faf9f5] rounded-md flex items-center justify-center">
+                              <span className="text-[#171415]/60">Audio File</span>
+                            </div>
+                          ) : (
+                            <div className="w-full h-32 bg-[#faf9f5] rounded-md flex items-center justify-center">
+                              <span className="text-[#171415]/60">Video File</span>
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="absolute top-2 right-2 p-1 bg-[#d97756] rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="h-4 w-4 text-white" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>

@@ -98,8 +98,8 @@ export default function Home() {
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 md:mb-6 fraunces-400" style={{ fontSize: "60px" }}>Finding Home</h1>
             <p className="text-xl md:text-2xl text-white mb-6 md:mb-8 leading-tight newsreader-200" style={{ fontSize: "36px", lineHeight: "44px", letterSpacing: "0.05em" }}>
               <strong>A collection of memories and stories of Robin Noor</strong>
-            </p>
-            <div>
+              </p>
+              <div>
               <a href="#join-form" className="btn-primary" style={{ fontSize: "22px", fontWeight: "300" }}>
                 Get access to memories today
               </a>

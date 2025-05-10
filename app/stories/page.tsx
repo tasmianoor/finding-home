@@ -65,6 +65,13 @@ export default function StoriesPage() {
       try {
         setIsLoading(true)
         
+        // Check if user is authenticated
+        const { data: { session }, error: authError } = await supabase.auth.getSession()
+        if (authError || !session) {
+          console.error('Not authenticated:', authError)
+          return
+        }
+
         // Build the query
         let query = supabase
           .from('stories')
@@ -114,7 +121,14 @@ export default function StoriesPage() {
 
         if (error) {
           console.error('Error fetching stories:', error)
+          console.error('Error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          })
         } else if (data) {
+          console.log('Fetched stories:', data.length)
           const storiesWithTags = data.map(story => ({
             ...story,
             tags: story.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({

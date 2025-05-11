@@ -2,7 +2,7 @@
 
 import type React from "react"
 import Link from "next/link"
-import { HomeIcon, PlusCircle, ArrowLeft, Bookmark, Rewind, FastForward, Play, Pause, Share2 } from "lucide-react"
+import { HomeIcon, PlusCircle, ArrowLeft, Bookmark, Rewind, FastForward, Play, Pause, Share2, ChevronLeft, ChevronRight } from "lucide-react"
 import { useState, useRef, useEffect } from "react"
 import NewStoryCard from "@/components/NewStoryCard"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
@@ -25,7 +25,6 @@ interface Comment {
   created_at: string
   updated_at: string
   profiles: {
-    username: string
     full_name: string
     avatar_url: string | null
   }
@@ -57,10 +56,10 @@ interface Story {
   }>
   isNew?: boolean // Optional flag for new stories
   profiles?: {
-    username: string
     full_name: string
     avatar_url: string | null
   }
+  images?: string[]
 }
 
 interface StoryTag {
@@ -88,6 +87,7 @@ export default function StoryContent({ storyId }: StoryContentProps) {
   const [commentsCount, setCommentsCount] = useState(0)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [nextStory, setNextStory] = useState<Story | null>(null)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
   // All ref hooks
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -119,7 +119,6 @@ export default function StoryContent({ storyId }: StoryContentProps) {
               )
             ),
             profiles!stories_user_id_fkey (
-              username,
               full_name,
               avatar_url
             )
@@ -138,7 +137,6 @@ export default function StoryContent({ storyId }: StoryContentProps) {
           .select(`
             *,
             profiles!comments_user_id_fkey (
-              username,
               full_name,
               avatar_url
             )
@@ -255,7 +253,15 @@ export default function StoryContent({ storyId }: StoryContentProps) {
         return
       }
 
-      if (isBookmarked) {
+      // Check if story is already bookmarked
+      const { data: existingBookmark } = await supabase
+        .from('bookmarks')
+        .select()
+        .eq('user_id', session.user.id)
+        .eq('story_id', storyId)
+        .single()
+
+      if (existingBookmark) {
         // Remove bookmark
         await supabase
           .from('bookmarks')
@@ -344,7 +350,7 @@ export default function StoryContent({ storyId }: StoryContentProps) {
       // First get the user's profile
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('username, full_name, avatar_url')
+        .select('full_name, avatar_url')
         .eq('id', session.user.id)
         .single()
 
@@ -371,7 +377,6 @@ export default function StoryContent({ storyId }: StoryContentProps) {
         .select(`
           *,
           profiles!comments_user_id_fkey (
-            username,
             full_name,
             avatar_url
           )
@@ -419,7 +424,7 @@ export default function StoryContent({ storyId }: StoryContentProps) {
       // First get the user's profile
       const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
-        .select('username, full_name, avatar_url')
+        .select('full_name, avatar_url')
         .eq('id', session.user.id)
         .single()
 
@@ -580,12 +585,12 @@ export default function StoryContent({ storyId }: StoryContentProps) {
   return (
     <div className="flex flex-col min-h-screen" style={{ background: "linear-gradient(to bottom, #faf9f5, #faf9f5)" }}>
       {/* Main Content */}
-      <main className="flex-1">
+      <main>
         <div className="max-w-4xl mx-auto px-3 sm:px-4 md:px-6 py-10 sm:py-12 md:py-16 lg:py-20">
           {/* Back Button */}
           <Link
             href="/stories"
-            className="inline-flex items-center gap-1 sm:gap-2 text-[#171415] hover:text-[#b15e4e] transition-colors mb-10 sm:mb-12 md:mb-16 newsreader-400"
+            className="inline-flex items-center gap-1 sm:gap-2 text-[#171415] hover:text-[#b15e4e] transition-colors mb-10 sm:mb-12 md:mb-16 newsreader-400 font-normal"
           >
             <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4" />
             <span className="text-xs sm:text-sm md:text-base">Back to all stories</span>
@@ -595,27 +600,29 @@ export default function StoryContent({ storyId }: StoryContentProps) {
           <div className="mb-8 sm:mb-10 md:mb-12 relative">
             <div className="flex justify-between items-start mb-4 sm:mb-6">
               {story.isNew && (
-                <div className="inline-block bg-[#faf9f5] px-3 sm:px-4 py-1 rounded-md border border-[#e4d9cb]">
-                  <span className="font-medium text-[#171415] text-xs sm:text-sm newsreader-400">NEW STORY</span>
+                <div className="inline-block bg-[#faf9f5] px-3 sm:px-4 py-1 rounded-md border border-[#b15e4e]">
+                  <span className="font-medium text-[#b15e4e] text-xs sm:text-sm newsreader-400">NEW STORY</span>
                 </div>
               )}
+            </div>
+
+            <div className="flex justify-between items-center mb-4 sm:mb-6 md:mb-8">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#171415] fraunces-500">
+                {story.title}
+              </h1>
               <button
                 onClick={toggleBookmark}
-                className="text-[#171415] hover:text-[#b15e4e] transition-colors"
+                className="text-[#171415] hover:text-[#b15e4e] transition-colors ml-4 flex-shrink-0"
                 aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
               >
                 <Bookmark
-                  className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7"
+                  className="h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10"
                   fill={isBookmarked ? "currentColor" : "none"}
                 />
               </button>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-[#171415] mb-4 sm:mb-6 md:mb-8 fraunces-400">
-              {story.title}
-            </h1>
-
-            <p className="text-sm sm:text-base md:text-lg text-[#171415]/80 mb-6 sm:mb-8 md:mb-10 newsreader-400">{story.description}</p>
+            <p className="text-[24px] text-[#171415]/80 mb-6 sm:mb-8 md:mb-10 newsreader-400">{story.description}</p>
 
             {/* Tags */}
             <div className="flex flex-wrap gap-2 mb-6 sm:mb-8 md:mb-10">
@@ -633,25 +640,6 @@ export default function StoryContent({ storyId }: StoryContentProps) {
 
           {/* Media Player */}
           <div className="bg-[#171415] rounded-lg overflow-hidden shadow-md">
-            <div className="flex items-center p-3 sm:p-4">
-              <img
-                src={story.thumbnail_url || "/placeholder.svg"}
-                alt="Episode thumbnail"
-                className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-md mr-3 sm:mr-4"
-              />
-              <div className="flex-1">
-                <h2 className="text-white text-sm sm:text-base font-medium mb-1 fraunces-400">{story.title}</h2>
-                <p className="text-[#e4d9cb] text-xs sm:text-sm line-clamp-1 newsreader-400">{story.description}</p>
-              </div>
-              <button
-                onClick={toggleBookmark}
-                className="text-white hover:text-[#b15e4e] transition-colors ml-2"
-                aria-label={isBookmarked ? "Remove bookmark" : "Add bookmark"}
-              >
-                <Bookmark className="h-4 w-4 sm:h-5 sm:w-5" fill={isBookmarked ? "currentColor" : "none"} />
-              </button>
-            </div>
-
             {/* Video Player */}
             {story.video_url && (
               <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
@@ -726,32 +714,72 @@ export default function StoryContent({ storyId }: StoryContentProps) {
               </>
             )}
 
-            {/* Image Only */}
+            {/* Image Carousel */}
             {!story.video_url && !story.audio_url && story.thumbnail_url && (
-              <div className="relative pt-[56.25%]"> {/* 16:9 aspect ratio */}
-                <img
-                  src={story.thumbnail_url}
-                  alt={story.title}
-                  className="absolute top-0 left-0 w-full h-full object-cover"
-                />
+              <div className="relative">
+                <div className="h-[900px]"> {/* Fixed height container */}
+                  <img
+                    src={story.thumbnail_url}
+                    alt={story.title}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                
+                {/* Carousel Navigation */}
+                {(() => {
+                  const images = story.images || [];
+                  if (images.length > 1) {
+                    return (
+                      <>
+                        <button
+                          onClick={() => setCurrentImageIndex(prev => (prev === 0 ? images.length - 1 : prev - 1))}
+                          className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-black/50  text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label="Previous image"
+                        >
+                          <ChevronLeft className="h-6 w-6" />
+                        </button>
+                        <button
+                          onClick={() => setCurrentImageIndex(prev => (prev === images.length - 1 ? 0 : prev + 1))}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label="Next image"
+                        >
+                          <ChevronRight className="h-6 w-6" />
+                        </button>
+                        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                          {images.map((_, idx) => (
+                            <div
+                              key={idx}
+                              className={`w-2 h-2 rounded-full ${
+                                idx === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
           </div>
         </div>
 
         {/* Transcript Section - Full Width */}
-        <div className="w-full bg-[#faf9f5] mt-8 sm:mt-10 md:mt-12">
-          <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
-            <h2 className="text-[#171415] text-sm sm:text-base font-medium uppercase tracking-wider mb-6 sm:mb-8 fraunces-400">
-              TRANSCRIPT
-            </h2>
+        {(story.video_url || story.audio_url) && (
+          <div className="w-full bg-[#faf9f5] mt-8 sm:mt-10 md:mt-12">
+            <div className="max-w-4xl mx-auto px-6 sm:px-8 py-8 sm:py-10">
+              <h2 className="text-[#171415] text-sm sm:text-base font-medium uppercase tracking-wider mb-6 sm:mb-8 fraunces-500">
+                TRANSCRIPT
+              </h2>
 
-            <div className="space-y-6">
-              <p className="text-[#171415]/80 italic newsreader-400">{story.transcript_question}</p>
-              <p className="text-[#171415] newsreader-400">{story.transcript_answer}</p>
+              <div className="space-y-6">
+                <p className="text-[#171415]/80 italic newsreader-400">{story.transcript_question}</p>
+                <p className="text-[#171415] newsreader-400">{story.transcript_answer}</p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Comments Section - Full Width */}
         <div className="w-full bg-[#faf9f5]">
@@ -833,12 +861,12 @@ export default function StoryContent({ storyId }: StoryContentProps) {
                         </button>
                       )}
                       {!comment.parent_id && (
-                        <button
-                          onClick={() => setReplyingTo(comment.id)}
+                      <button
+                        onClick={() => setReplyingTo(comment.id)}
                           className="text-[#171415]/60 text-xs sm:text-sm hover:text-[#b15e4e] newsreader-400"
-                        >
-                          Reply
-                        </button>
+                      >
+                        Reply
+                      </button>
                       )}
                     </div>
                   </div>
@@ -922,22 +950,6 @@ export default function StoryContent({ storyId }: StoryContentProps) {
           />
         )}
       </main>
-
-      {/* Footer */}
-      <footer className="bg-[#171415] text-white py-3 xs:py-4 sm:py-6">
-        <div className="max-w-6xl mx-auto px-3 xs:px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center gap-1 xs:gap-2 mb-2 xs:mb-3 md:mb-0">
-            <div className="bg-white rounded p-0.5 xs:p-1">
-              <HomeIcon className="h-2.5 w-2.5 xs:h-3 xs:w-3 sm:h-4 sm:w-4 text-[#171415]" />
-            </div>
-            <span className="text-xs xs:text-sm sm:text-base font-medium instrument-400">Finding home</span>
-          </div>
-          <div className="text-center md:text-right text-[10px] xs:text-xs sm:text-sm newsreader-400">
-            <p>Copyrighted 2024</p>
-            <p>Designed by T. Noor</p>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 } 

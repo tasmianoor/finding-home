@@ -190,8 +190,19 @@ export default function DashboardPage() {
           .single()
 
         if (featuredError) {
-          console.error('Error fetching featured story:', featuredError)
+          console.error('Error fetching featured story:', {
+            message: featuredError.message,
+            details: featuredError.details,
+            hint: featuredError.hint,
+            code: featuredError.code
+          })
+          // Don't throw error, just log it and continue
         } else if (featured) {
+          console.log('Featured story fetched successfully:', {
+            id: featured.id,
+            title: featured.title,
+            has_tags: !!featured.story_tags?.length
+          })
           const tags = featured.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({
             name: st.tags.name,
             icon: st.tags.icon
@@ -202,6 +213,8 @@ export default function DashboardPage() {
             episode_number: episodeMap.get(featured.id) || 0,
             tags 
           })
+        } else {
+          console.log('No featured story found')
         }
 
         // Fetch recent stories
@@ -221,8 +234,18 @@ export default function DashboardPage() {
           .limit(2)
 
         if (recentError) {
-          console.error('Error fetching recent stories:', recentError)
+          console.error('Error fetching recent stories:', {
+            message: recentError.message,
+            details: recentError.details,
+            hint: recentError.hint,
+            code: recentError.code
+          })
+          // Don't throw error, just log it and continue
         } else if (recent) {
+          console.log('Recent stories fetched successfully:', {
+            count: recent.length,
+            first_story: recent[0]?.title
+          })
           const storiesWithTags = recent.map(story => ({
             ...story,
             episode_number: episodeMap.get(story.id) || 0,
@@ -232,6 +255,8 @@ export default function DashboardPage() {
             })) || []
           }))
           setRecentStories(storiesWithTags)
+        } else {
+          console.log('No recent stories found')
         }
 
         // Get total count of stories
@@ -326,16 +351,16 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 {[
                   {
-                    title: "Family Stories",
-                    description: "Discover and listen to stories shared by family members. Each story is a unique piece of our family's history.",
-                    icon: <BookOpen className="h-5 w-5 text-[#d97756] mb-2" />,
-                    link: "/stories"
-                  },
-                  {
                     title: "Your Profile",
                     description: "View and manage your profile settings. Keep your information up to date to stay connected with the family.",
                     icon: <User className="h-5 w-5 text-[#d97756] mb-2" />,
                     link: "/profile"
+                  },
+                  {
+                    title: "Family Stories",
+                    description: "Discover and listen to stories shared by family members. Each story is a unique piece of our family's history.",
+                    icon: <BookOpen className="h-5 w-5 text-[#d97756] mb-2" />,
+                    link: "/stories"
                   },
                   {
                     title: "Add Memories",
@@ -366,7 +391,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#faf9f5] flex flex-col">
       <MainNav />
-      <main className="flex-1 pt-16">
+      <main className="flex-1">
         {featuredStory && (
           <section className="bg-[#faf9f5] py-8 sm:py-12 md:py-16">
             <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -375,7 +400,7 @@ export default function DashboardPage() {
                   <div className="inline-block bg-[#faf9f5] px-3 sm:px-4 py-1 rounded-md">
                     <span className="font-medium text-[#d97756] text-sm sm:text-base newsreader-500">NEW STORY</span>
                   </div>
-                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] fraunces-400">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] fraunces-500">
                     Episode {featuredStory.episode_number}:
                     <br />
                     {featuredStory.title}
@@ -395,7 +420,7 @@ export default function DashboardPage() {
                   <img
                     src={featuredStory.thumbnail_url || "/placeholder.svg"}
                     alt={featuredStory.title}
-                    className="relative z-10 rounded-md w-full h-auto"
+                    className="relative z-10 rounded-md w-[450px] h-[450px] object-cover"
                   />
                 </div>
               </div>
@@ -406,7 +431,7 @@ export default function DashboardPage() {
         {recentStories.length > 0 && (
           <section className="bg-white py-12">
             <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 md:mb-12 text-[#171415] fraunces-400">Pick up where you left off</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 md:mb-12 text-[#171415] fraunces-500">Pick up where you left off</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                 {recentStories.map((story) => (
                   <Link key={story.id} href={`/stories/${story.id}`} className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200">
@@ -423,8 +448,8 @@ export default function DashboardPage() {
                         alt={story.title}
                         className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                       />
-                      <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
-                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                        <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                           {story.title}
                         </h3>
                         <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
@@ -452,7 +477,7 @@ export default function DashboardPage() {
         {bookmarkedStories.length > 0 && (
           <section className="bg-[#faf9f5] py-12">
             <div className="max-w-6xl mx-auto px-6">
-              <h2 className="text-3xl sm:text-4xl font-bold mb-8 sm:mb-12 md:mb-16 text-[#171415] fraunces-400">Saved by you</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-8 sm:mb-12 md:mb-16 text-[#171415] fraunces-500">Saved by you</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {bookmarkedStories.map((story) => (
                   <Link key={story.id} href={`/stories/${story.id}`} className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200">
@@ -469,8 +494,8 @@ export default function DashboardPage() {
                         alt={story.title}
                         className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                       />
-                      <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
-                        <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                        <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                           {story.title}
                         </h3>
                         <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
@@ -497,7 +522,7 @@ export default function DashboardPage() {
             <div className="max-w-6xl mx-auto px-6">
               <div className="mb-12">
                 <div className="flex justify-between items-end mb-6 sm:mb-8">
-                  <h2 className="text-xl sm:text-2xl font-bold text-[#171415] fraunces-400">Latest Buzz</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#171415] fraunces-500">Latest Buzz</h2>
                   <p className="text-sm text-[#171415] newsreader-400">
                     Showing {latestStories.length} of {totalStories} stories
                   </p>
@@ -518,8 +543,8 @@ export default function DashboardPage() {
                           alt={story.title}
                           className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                         />
-                        <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
-                          <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                          <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                             {story.title}
                           </h3>
                           <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">

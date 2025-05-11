@@ -4,16 +4,27 @@ import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
 import Image from 'next/image'
-import { Upload, BookOpen } from 'lucide-react'
+import { Upload, BookOpen, User, Trash2 } from 'lucide-react'
 import MainNav from '../components/MainNav'
 import Footer from '../components/Footer'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Profile {
   id: string
   full_name: string
   email: string
-  relationship_to_author: string
+  relation: string
   bio: string | null
   avatar_url: string | null
   updated_at: string
@@ -39,6 +50,7 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editedProfile, setEditedProfile] = useState<Partial<Profile>>({})
   const [error, setError] = useState<string | null>(null)
+  const [storyToDelete, setStoryToDelete] = useState<Story | null>(null)
   const supabase = createClientComponentClient()
   const router = useRouter()
 
@@ -48,7 +60,11 @@ export default function ProfilePage() {
       console.log('Starting profile refresh...')
       
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      console.log('Session check:', { session: !!session, error: sessionError })
+      console.log('Session check:', { 
+        hasSession: !!session, 
+        error: sessionError,
+        userId: session?.user?.id 
+      })
       
       if (sessionError) {
         console.error('Session error:', sessionError)
@@ -66,10 +82,15 @@ export default function ProfilePage() {
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single()
+        .maybeSingle()
 
       if (profileError) {
-        console.error('Profile fetch error:', profileError)
+        console.error('Profile fetch error:', {
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          code: profileError.code
+        })
         throw new Error(`Failed to fetch profile: ${profileError.message}`)
       }
 
@@ -79,7 +100,12 @@ export default function ProfilePage() {
         return
       }
 
-      console.log('Profile fetched successfully:', profileData)
+      console.log('Profile fetched successfully:', {
+        id: profileData.id,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        has_avatar: !!profileData.avatar_url
+      })
       setProfile(profileData as Profile)
       setEditedProfile(profileData as Profile)
 
@@ -101,7 +127,10 @@ export default function ProfilePage() {
         throw new Error(`Failed to fetch stories: ${storiesError.message}`)
       }
 
-      console.log('Stories fetched successfully:', storiesData)
+      console.log('Stories fetched successfully:', {
+        count: storiesData?.length,
+        first_story: storiesData?.[0]?.title
+      })
       setStories(storiesData as Story[])
     } catch (err) {
       console.error('Error refreshing profile:', err)
@@ -130,7 +159,16 @@ export default function ProfilePage() {
     try {
       setError(null)
       const file = e.target.files?.[0]
-      if (!file) return
+      if (!file) {
+        console.log('No file selected')
+        return
+      }
+
+      console.log('Starting upload process...', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      })
 
       // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
@@ -144,111 +182,233 @@ export default function ProfilePage() {
         return
       }
 
-      const { data: { session } } = await supabase.auth.getSession()
+      // Get session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        throw new Error('Failed to get session')
+      }
+
       if (!session) {
+        console.log('No session found')
         router.push('/signin')
         return
       }
 
+      console.log('Session found, user ID:', session.user.id)
+
+      // Create a unique file name
       const fileExt = file.name.split('.').pop()
-      const fileName = `${session.user.id}-${Math.random()}.${fileExt}`
-      const filePath = fileName
+      const fileName = `${session.user.id}/${Date.now()}.${fileExt}`
+      console.log('Generated filename:', fileName)
 
-      // Delete old avatar if it exists
-      if (editedProfile.avatar_url) {
-        const oldPath = editedProfile.avatar_url.split('/').pop()
-        if (oldPath) {
-          await supabase.storage
-            .from('avatars')
-            .remove([oldPath])
-        }
-      }
-
-      // Upload new avatar with proper metadata
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      // Upload the file with proper content type
+      console.log('Attempting to upload file...')
+      const { data, error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file, {
+        .upload(fileName, file, {
+          contentType: file.type,
           cacheControl: '3600',
-          upsert: true,
-          contentType: file.type
+          upsert: true
         })
 
       if (uploadError) {
-        console.error('Upload error details:', {
+        console.error('Upload error:', {
           message: uploadError.message,
-          name: uploadError.name
+          name: uploadError.name,
+          statusCode: (uploadError as any).statusCode
         })
-        throw new Error(`Failed to upload image: ${uploadError.message || 'Unknown error'}`)
+        if (uploadError.message.includes('400')) {
+          throw new Error('Invalid file format or size. Please try a different image.')
+        }
+        throw new Error(`Upload failed: ${uploadError.message}`)
       }
 
-      if (!uploadData) {
+      if (!data) {
         throw new Error('No data returned from upload')
       }
 
-      console.log('Upload successful:', uploadData)
+      console.log('File uploaded successfully:', {
+        path: data.path,
+        id: data.id
+      })
 
-      // Get the public URL with a signed URL that expires
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .createSignedUrl(filePath, 31536000) // URL valid for 1 year
+        .getPublicUrl(fileName)
 
-      if (signedUrlError) {
-        console.error('Signed URL error:', signedUrlError)
-        throw new Error(`Failed to generate image URL: ${signedUrlError.message}`)
+      console.log('Generated public URL:', publicUrl)
+
+      // Update the profile
+      console.log('Updating profile with new avatar URL...')
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          avatar_url: publicUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.user.id)
+
+      if (updateError) {
+        console.error('Profile update error:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code
+        })
+        throw new Error(`Profile update failed: ${updateError.message}`)
       }
 
-      if (!signedUrlData?.signedUrl) {
-        throw new Error('No signed URL generated')
-      }
+      console.log('Profile updated successfully')
 
-      console.log('Signed URL generated successfully')
-      setEditedProfile({ ...editedProfile, avatar_url: signedUrlData.signedUrl })
+      // Update the local state
+      setEditedProfile(prev => ({
+        ...prev,
+        avatar_url: publicUrl
+      }))
+
+      console.log('Local state updated')
+
     } catch (err) {
-      console.error('Error uploading image:', err)
-      setError(err instanceof Error ? err.message : 'Failed to upload image. Please try again.')
+      console.error('Error in handleImageUpload:', err)
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError('Failed to upload image. Please try again.')
+      }
     }
   }
 
   const handleSave = async () => {
     try {
       setError(null)
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        throw new Error('Failed to get session')
+      }
+
       if (!session) {
+        console.log('No session found')
         router.push('/signin')
         return
       }
 
-      console.log('Saving profile with relation:', editedProfile.relationship_to_author)
-
-      const { data, error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: editedProfile.full_name,
-          relationship_to_author: editedProfile.relationship_to_author,
-          bio: editedProfile.bio,
-          avatar_url: editedProfile.avatar_url,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', session.user.id)
-        .select()
-
-      if (updateError) {
-        console.error('Error updating profile:', updateError)
-        throw updateError
+      // Validate required fields
+      if (!editedProfile.full_name?.trim()) {
+        throw new Error('Full name is required')
       }
 
-      console.log('Profile updated successfully:', data)
-      setProfile(editedProfile as Profile)
+      if (!editedProfile.relation) {
+        throw new Error('Relationship to Robin is required')
+      }
+
+      // Validate field lengths
+      if (editedProfile.full_name.trim().length > 100) {
+        throw new Error('Full name must be less than 100 characters')
+      }
+
+      if (editedProfile.bio && editedProfile.bio.trim().length > 70) {
+        throw new Error('Bio must be less than 70 characters')
+      }
+
+      // Prepare the profile data
+      const profileData = {
+        id: session.user.id,
+        full_name: editedProfile.full_name.trim(),
+        relation: editedProfile.relation,
+        bio: editedProfile.bio?.trim() || null,
+        avatar_url: editedProfile.avatar_url,
+        updated_at: new Date().toISOString()
+      }
+
+      console.log('Saving profile with data:', profileData)
+
+      // First check if profile exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', session.user.id)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error('Error checking profile:', checkError)
+        throw new Error(`Failed to check profile: ${checkError.message}`)
+      }
+
+      let result;
+      if (!existingProfile) {
+        // Create new profile
+        result = await supabase
+          .from('profiles')
+          .insert({
+            ...profileData,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .throwOnError()
+      } else {
+        // Update existing profile
+        result = await supabase
+          .from('profiles')
+          .update(profileData)
+          .eq('id', session.user.id)
+          .select()
+          .throwOnError()
+      }
+
+      if (!result.data || result.data.length === 0) {
+        throw new Error('No profile was saved')
+      }
+
+      console.log('Profile saved successfully:', {
+        id: result.data[0].id,
+        full_name: result.data[0].full_name,
+        updated_at: result.data[0].updated_at
+      })
+
+      setProfile(result.data[0] as Profile)
       setIsEditing(false)
     } catch (err) {
-      console.error('Error updating profile:', err)
-      setError('Failed to update profile. Please try again.')
+      console.error('Error saving profile:', err)
+      if (err instanceof Error) {
+        console.error('Error details:', {
+          message: err.message,
+          name: err.name,
+          stack: err.stack
+        })
+      }
+      setError(err instanceof Error ? err.message : 'Failed to save profile. Please try again.')
     }
   }
 
   const handleCancel = () => {
     setEditedProfile(profile as Profile)
     setIsEditing(false)
+  }
+
+  const handleDeleteStory = async () => {
+    if (!storyToDelete) return
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('stories')
+        .delete()
+        .eq('id', storyToDelete.id)
+
+      if (deleteError) {
+        throw new Error(`Failed to delete story: ${deleteError.message}`)
+      }
+
+      // Update local state
+      setStories(prev => prev.filter(story => story.id !== storyToDelete.id))
+      setStoryToDelete(null)
+    } catch (err) {
+      console.error('Error deleting story:', err)
+      setError(err instanceof Error ? err.message : 'Failed to delete story. Please try again.')
+    }
   }
 
   if (isLoading) {
@@ -285,7 +445,7 @@ export default function ProfilePage() {
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-lg font-medium text-[#171415] mb-2 newsreader-500">
+                  <h2 className="text-lg font-medium text-[#171415] mb-2 fraunces-500">
                     Account Not Verified
                   </h2>
                   <p className="text-[#171415]/80 mb-4 newsreader-400">
@@ -347,12 +507,12 @@ export default function ProfilePage() {
                     >
                       Request verification
                     </button>
-                    <button
+                    <Button
                       onClick={refreshProfile}
-                      className="bg-[#e4d9cb] text-[#171415] px-4 py-2 rounded-md hover:bg-[#e4d9cb]/90 transition-colors newsreader-400"
+                      variant="secondary"
                     >
                       Refresh status
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -371,10 +531,8 @@ export default function ProfilePage() {
                       className="object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#d97756]">
-                      <span className="text-5xl font-medium">
-                        {editedProfile.full_name && editedProfile.full_name.length > 0 ? editedProfile.full_name.charAt(0) : '?'}
-                      </span>
+                    <div className="w-full h-full flex items-center justify-center bg-[#faf9f5] border border-[#e4d9cb]">
+                      <User className="h-12 w-12 text-[#d97756]" />
                     </div>
                   )}
                   <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
@@ -397,10 +555,8 @@ export default function ProfilePage() {
                       className="object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-[#d97756]">
-                      <span className="text-5xl font-medium">
-                        {profile.full_name && profile.full_name.length > 0 ? profile.full_name.charAt(0) : '?'}
-                      </span>
+                    <div className="w-full h-full flex items-center justify-center bg-[#faf9f5] border border-[#e4d9cb]">
+                      <User className="h-12 w-12 text-[#d97756]" />
                     </div>
                   )}
                 </>
@@ -427,8 +583,8 @@ export default function ProfilePage() {
                     </label>
                     <select
                       id="relation"
-                      value={editedProfile.relationship_to_author}
-                      onChange={(e) => setEditedProfile({ ...editedProfile, relationship_to_author: e.target.value })}
+                      value={editedProfile.relation}
+                      onChange={(e) => setEditedProfile({ ...editedProfile, relation: e.target.value })}
                       className="w-full px-3 py-2 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-2 focus:ring-[#d97756] focus:border-transparent newsreader-400"
                     >
                       <option value="spouse_or_child">Spouse or child</option>
@@ -452,25 +608,25 @@ export default function ProfilePage() {
                     </p>
                   </div>
                   <div className="flex gap-4">
-                    <button
+                    <Button
                       onClick={handleSave}
-                      className="bg-[#171415] text-[#faf9f5] px-4 py-2 rounded-md hover:bg-[#171415]/90 transition-colors newsreader-400"
+                      variant="default"
                     >
                       Save changes
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={handleCancel}
-                      className="bg-[#e4d9cb] text-[#171415] px-4 py-2 rounded-md hover:bg-[#e4d9cb]/90 transition-colors newsreader-400"
+                      variant="secondary"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
                 <>
                   <div className="flex justify-between items-start">
                     <div>
-                      <h1 className="text-2xl sm:text-3xl font-bold text-[#171415] mb-2 newsreader-500">
+                      <h1 className="text-2xl sm:text-3xl font-bold text-[#171415] mb-2 fraunces-500">
                         {profile.full_name}
                       </h1>
                       <p className="text-[#171415] mb-2 newsreader-400">
@@ -478,16 +634,16 @@ export default function ProfilePage() {
                       </p>
                       <div className="inline-flex items-center px-3 py-1 rounded-full bg-[#faf9f5] border border-[#e4d9cb] mb-4">
                         <span className="text-[#171415] newsreader-400">
-                          {profile.relationship_to_author === 'spouse_or_child' ? 'Spouse or Child' :
-                           profile.relationship_to_author === 'parent_or_sibling' ? 'Parent or Sibling' :
-                           profile.relationship_to_author === 'relative' ? 'Relative' :
-                           profile.relationship_to_author === 'friend' ? 'Friend' :
+                          {profile.relation === 'spouse_or_child' ? 'Spouse or Child' :
+                           profile.relation === 'parent_or_sibling' ? 'Parent or Sibling' :
+                           profile.relation === 'relative' ? 'Relative' :
+                           profile.relation === 'friend' ? 'Friend' :
                            'Relation to Robin'}
                         </span>
                       </div>
                       {profile.bio && (
                         <div className="mt-4">
-                          <h2 className="text-lg font-medium text-[#171415] mb-2 newsreader-500">
+                          <h2 className="text-lg font-medium text-[#171415] mb-2 fraunces-500">
                             About
                           </h2>
                           <p className="text-[#171415]/80 newsreader-400">
@@ -497,12 +653,12 @@ export default function ProfilePage() {
                       )}
                     </div>
                     <div className="flex flex-col items-end gap-2">
-                      <button
+                      <Button
                         onClick={handleEdit}
-                        className="bg-[#e4d9cb] text-[#171415] px-4 py-2 rounded-md hover:bg-[#e4d9cb]/90 transition-colors newsreader-400"
+                        variant="secondary"
                       >
                         Edit profile
-                      </button>
+                      </Button>
                       <p className="text-sm text-[#171415]/40 newsreader-400">
                         Last updated: {new Date(profile.updated_at).toLocaleDateString()}
                       </p>
@@ -519,32 +675,76 @@ export default function ProfilePage() {
             </div>
           )}
 
+          <AlertDialog open={!!storyToDelete} onOpenChange={() => setStoryToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="text-[#171415] fraunces-500">Delete Memory</AlertDialogTitle>
+                <AlertDialogDescription className="text-[#171415]/80 newsreader-400">
+                  Are you sure you want to delete this memory? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel asChild>
+                  <Button variant="default" className="instrument-400 text-[#171415] hover:text-[#171415]">
+                    No, keep my memories
+                  </Button>
+                </AlertDialogCancel>
+                <AlertDialogAction asChild>
+                  <Button 
+                    variant="secondary" 
+                    className="instrument-400 text-white hover:text-white"
+                    onClick={handleDeleteStory}
+                  >
+                    Continue to delete
+                  </Button>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
           <div className="mt-12 pt-12 border-t border-[#e4d9cb]">
             {stories.length > 0 && (
               <div>
-                <h2 className="text-2xl font-medium text-[#171415] mb-6 newsreader-500 flex items-center gap-2">
+                <h2 className="text-2xl font-medium text-[#171415] mb-6 fraunces-500 flex items-center gap-2" style={{ fontWeight: 500 }}>
                   <BookOpen className="h-6 w-6 text-[#d97756]" />
-                  My Shared Memories
+                  My shared memories
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {stories.map((story) => (
                     <Link 
                       key={story.id} 
                       href={`/stories/${story.id}`} 
-                      className="group cursor-pointer relative"
+                      className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200"
                     >
-                      <div className="relative h-64 overflow-hidden rounded-lg">
+                      <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Trash2 
+                          className="h-5 w-5 text-white cursor-pointer hover:text-[#d97756]" 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setStoryToDelete(story);
+                          }}
+                        />
+                      </div>
+                      <div className="relative">
                         <img
                           src={story.thumbnail_url || "/placeholder.svg"}
                           alt={story.title}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 flex flex-col justify-end">
-                          <h3 className="text-white text-xl font-bold mb-2 newsreader-500">
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                          <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                             {story.title}
                           </h3>
-                          <p className="text-white/80 text-sm newsreader-400">
+                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
                             {story.description}
+                          </p>
+                          <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
+                            {new Date(story.created_at).toLocaleDateString('en-US', {
+                              month: 'long',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
                           </p>
                         </div>
                       </div>
@@ -556,19 +756,20 @@ export default function ProfilePage() {
 
             {stories.length === 0 && (
               <div className="mt-12 text-center">
-                <h2 className="text-2xl font-medium text-[#171415] mb-4 newsreader-500 flex items-center justify-center gap-2">
+                <h2 className="text-2xl font-medium text-[#171415] mb-4 fraunces-500 flex items-center justify-center gap-2">
                   <BookOpen className="h-6 w-6 text-[#d97756]" />
                   My Shared Memories
                 </h2>
                 <p className="text-[#171415]/60 mb-6 newsreader-400 max-w-md mx-auto">
                   Your memories with Robin are waiting to be shared!
                 </p>
-                <button
+                <Button
                   onClick={() => router.push('/add-memories')}
-                  className="bg-[#171415] text-[#faf9f5] px-6 py-3 rounded-md hover:bg-[#171415]/90 transition-colors newsreader-400"
+                  variant="default"
+                  size="lg"
                 >
                   Share your first memory
-                </button>
+                </Button>
               </div>
             )}
           </div>

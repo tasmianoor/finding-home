@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation"
 import { Spinner } from "@/components/ui/spinner"
 import MainNav from "../components/MainNav"
 import Footer from "../components/Footer"
+import { Button } from '@/components/ui/button'
 
 interface Story {
   title: string
@@ -246,24 +247,34 @@ export default function AddMemoriesPage() {
 
           const memoriesBucket = buckets?.find(b => b.name === 'memories')
           if (!memoriesBucket) {
-            console.error('Memories bucket not found, attempting to create it...')
-            const { data: newBucket, error: createError } = await supabase
-              .storage
-              .createBucket('memories', {
-                public: false,
-                fileSizeLimit: 10 * 1024 * 1024 // 10MB
-              })
+            console.log('Memories bucket not found, attempting to create it...')
+            try {
+              const { data: newBucket, error: createError } = await supabase
+                .storage
+                .createBucket('memories', {
+                  public: false,
+                  fileSizeLimit: 10 * 1024 * 1024 // 10MB
+                })
 
-            if (createError) {
-              console.error('Failed to create memories bucket:', createError)
-              throw new Error(`Failed to create memories bucket: ${createError.message}`)
+              if (createError) {
+                // If bucket already exists (race condition), continue
+                if (createError.message.includes('already exists')) {
+                  console.log('Memories bucket already exists, continuing...')
+                } else {
+                  console.error('Failed to create memories bucket:', createError)
+                  throw new Error(`Failed to create memories bucket: ${createError.message}`)
+                }
+              }
+
+              if (newBucket) {
+                console.log('Memories bucket created successfully:', newBucket)
+              }
+            } catch (error) {
+              // If bucket creation fails for any reason, try to continue
+              console.log('Error during bucket creation, attempting to continue:', error)
             }
-
-            if (!newBucket) {
-              throw new Error('Failed to create memories bucket: No bucket data returned')
-            }
-
-            console.log('Memories bucket created successfully:', newBucket)
+          } else {
+            console.log('Using existing memories bucket')
           }
 
           console.log('Using memories bucket for uploads')
@@ -355,23 +366,27 @@ export default function AddMemoriesPage() {
             }
           }
 
-          // Add files to story_files
-          const fileRecords = uploadedFiles.map(file => ({
-            story_id: story.id,
-            file_path: file.path,
-            file_type: file.type,
-            created_at: new Date().toISOString()
-          }))
+          // Add files to story_files only if we have uploaded files
+          if (uploadedFiles.length > 0) {
+            const fileRecords = uploadedFiles.map(file => ({
+              story_id: story.id,
+              file_path: file.path,
+              file_type: file.type,
+              created_at: new Date().toISOString()
+            }))
 
-          console.log('Adding file records:', fileRecords)
+            console.log('Adding file records:', fileRecords)
 
-          const { error: filesError } = await supabase
-            .from('story_files')
-            .insert(fileRecords)
+            const { error: filesError } = await supabase
+              .from('story_files')
+              .insert(fileRecords)
 
-          if (filesError) {
-            console.error('File records error:', filesError)
-            throw new Error(`Failed to add file records: ${filesError.message}`)
+            if (filesError) {
+              console.error('File records error:', filesError)
+              throw new Error(`Failed to add file records: ${filesError.message}`)
+            } else {
+              console.log('File records added successfully.')
+            }
           }
         } catch (error) {
           console.error('Upload process error:', error)
@@ -382,9 +397,25 @@ export default function AddMemoriesPage() {
       // Add tags if any
       if (selectedTags.length > 0) {
         try {
-          const tagRecords = selectedTags.map(tag => ({
+          // First, get the tag IDs for the selected tag names
+          const { data: tagsData, error: tagsError } = await supabase
+            .from('tags')
+            .select('id')
+            .in('name', selectedTags)
+
+          if (tagsError) {
+            console.error('Error fetching tags:', tagsError)
+            throw new Error(`Failed to fetch tags: ${tagsError.message}`)
+          }
+
+          if (!tagsData || tagsData.length === 0) {
+            throw new Error('No tags found for the selected names')
+          }
+
+          // Create the story_tags records with the correct tag IDs
+          const tagRecords = tagsData.map(tag => ({
             story_id: story.id,
-            tag_name: tag,
+            tag_id: tag.id,
             created_at: new Date().toISOString()
           }))
 
@@ -393,7 +424,7 @@ export default function AddMemoriesPage() {
           const { error: tagError } = await supabase
             .from('story_tags')
             .insert(tagRecords)
-
+            
           if (tagError) {
             console.error('Tag error:', tagError)
             throw new Error(`Failed to add tags: ${tagError.message}`)
@@ -404,6 +435,7 @@ export default function AddMemoriesPage() {
         }
       }
 
+      // If we get here, everything was successful
       setSuccess('Story created successfully!')
       router.push(`/stories/${story.id}`)
     } catch (err) {
@@ -432,7 +464,7 @@ export default function AddMemoriesPage() {
       <main className="pt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-[#171415] mb-4 newsreader-500">
+            <h1 className="text-4xl font-bold text-[#171415] mb-4 fraunces-500">
               Add Your Memory
             </h1>
             <p className="text-[#171415]/80 text-lg newsreader-400">
@@ -443,7 +475,7 @@ export default function AddMemoriesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white rounded-lg shadow-md p-6">
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div>
+              <div>
                   <label htmlFor="title" className="block text-sm font-medium text-[#171415] mb-2 newsreader-400">
                     Title
                   </label>
@@ -471,9 +503,9 @@ export default function AddMemoriesPage() {
                     className="w-full px-4 py-2 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-2 focus:ring-[#d97756] focus:border-transparent newsreader-400"
                     placeholder="Write your story here..."
                   />
-                </div>
+              </div>
 
-                <div>
+              <div>
                   <label className="block text-sm font-medium text-[#171415] mb-2 newsreader-400">
                     Upload Media
                   </label>
@@ -481,10 +513,10 @@ export default function AddMemoriesPage() {
                     <div className="space-y-1 text-center">
                       <Upload className="mx-auto h-12 w-12 text-[#171415]/40" />
                       <div className="flex text-sm text-[#171415]/60 newsreader-400">
-                        <label
-                          htmlFor="file-upload"
+                  <label 
+                    htmlFor="file-upload" 
                           className="relative cursor-pointer bg-white rounded-md font-medium text-[#d97756] hover:text-[#d97756]/90 focus-within:outline-none"
-                        >
+                  >
                           <span>Upload files</span>
                           <input
                             id="file-upload"
@@ -495,7 +527,7 @@ export default function AddMemoriesPage() {
                             onChange={handleFileChange}
                             className="sr-only"
                           />
-                        </label>
+                  </label>
                         <p className="pl-1">or drag and drop</p>
                       </div>
                       <p className="text-xs text-[#171415]/40 newsreader-400">
@@ -535,71 +567,71 @@ export default function AddMemoriesPage() {
                       ))}
                     </div>
                   )}
-                </div>
+              </div>
 
-                <div>
-                  <p className="block text-xs sm:text-sm md:text-base font-medium mb-2 sm:mb-3 md:mb-4">
-                    Who can see this post? (Select all that apply)
-                  </p>
-                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">
-                    {["Spouse or child", "Parent or sibling", "Relative", "Friend"].map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => {
-                          setSelectedVisibility(prev => {
-                            if (prev.includes(option)) {
-                              return prev.filter(v => v !== option)
-                            }
-                            return [...prev, option]
-                          })
-                        }}
+              <div>
+                <p className="block text-xs sm:text-sm md:text-base font-medium mb-2 sm:mb-3 md:mb-4">
+                  Who can see this post? (Select all that apply)
+                </p>
+                <div className="grid grid-cols-1 xs:grid-cols-2 gap-2 sm:gap-3">
+                  {["Spouse or child", "Parent or sibling", "Relative", "Friend"].map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        setSelectedVisibility(prev => {
+                          if (prev.includes(option)) {
+                            return prev.filter(v => v !== option)
+                          }
+                          return [...prev, option]
+                        })
+                      }}
                         disabled={isSubmitting}
-                        className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
-                          selectedVisibility.includes(option)
-                            ? "bg-amber-100 border-amber-300 text-amber-800"
-                            : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
+                        selectedVisibility.includes(option)
+                          ? "bg-amber-100 border-amber-300 text-amber-800"
+                          : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                         } transition-colors ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
+                    >
+                      {option}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div>
-                  <p className="block text-xs sm:text-sm md:text-base font-medium mb-2 sm:mb-3 md:mb-4">
-                    Choose any 3 tags that best describe your post:
-                  </p>
-                  <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
-                    {[
-                      "Childhood",
-                      "Family",
-                      "Grief",
-                      "Health",
-                      "Hobbies & Interests",
-                      "Liberation war",
-                      "Pride",
-                      "Proud moments",
-                      "Sports",
-                      "Travel",
-                    ].map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => toggleTag(tag)}
+              <div>
+                <p className="block text-xs sm:text-sm md:text-base font-medium mb-2 sm:mb-3 md:mb-4">
+                  Choose any 3 tags that best describe your post:
+                </p>
+                <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
+                  {[
+                    "Childhood",
+                    "Family",
+                    "Grief",
+                    "Health",
+                    "Hobbies & Interests",
+                    "Liberation war",
+                    "Pride",
+                    "Proud moments",
+                    "Sports",
+                    "Travel",
+                  ].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
                         disabled={isSubmitting}
-                        className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
-                          selectedTags.includes(tag)
-                            ? "bg-amber-100 border-amber-300 text-amber-800"
-                            : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
+                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
+                        selectedTags.includes(tag)
+                          ? "bg-amber-100 border-amber-300 text-amber-800"
+                          : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                         } transition-colors ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
+                    >
+                      {tag}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
                 {error && (
                   <p className="text-[#d97756] text-sm newsreader-400">
@@ -613,18 +645,19 @@ export default function AddMemoriesPage() {
                   </p>
                 )}
 
-                <button
+                <Button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#171415] text-[#faf9f5] py-3 px-4 rounded-md hover:bg-[#171415]/90 transition-colors newsreader-400"
+                  variant="default"
+                  size="lg"
+                  isLoading={isSubmitting}
                 >
-                  {isSubmitting ? 'Saving...' : 'Save Memory'}
-                </button>
+                  {isSubmitting ? 'Sharing memory...' : 'Share memory'}
+                </Button>
               </form>
             </div>
 
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-medium text-[#171415] mb-4 newsreader-500">
+              <h2 className="text-xl font-medium text-[#171415] mb-4 fraunces-500">
                 Preview
               </h2>
               <div className="prose max-w-none">
@@ -647,11 +680,11 @@ export default function AddMemoriesPage() {
                                 index === currentImageIndex ? 'opacity-100' : 'opacity-0 absolute top-0 left-0'
                               }`}
                             >
-                              <img
-                                src={preview.url}
+                          <img
+                            src={preview.url}
                                 alt="Preview"
                                 className="w-full h-auto rounded-lg object-cover"
-                              />
+                          />
                             </div>
                           ))}
                         {mediaPreviews.filter(p => p.type.startsWith('image/')).length > 1 && (
@@ -662,12 +695,12 @@ export default function AddMemoriesPage() {
                             >
                               <ChevronLeft className="h-6 w-6" />
                             </button>
-                            <button
+                        <button
                               onClick={nextImage}
                               className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
+                        >
                               <ChevronRight className="h-6 w-6" />
-                            </button>
+                        </button>
                             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                               {mediaPreviews
                                 .filter(p => p.type.startsWith('image/'))
@@ -679,7 +712,7 @@ export default function AddMemoriesPage() {
                                     }`}
                                   />
                                 ))}
-                            </div>
+                      </div>
                           </>
                         )}
                       </div>
@@ -732,14 +765,14 @@ export default function AddMemoriesPage() {
                     <p className="text-[#171415]/80 newsreader-400">
                       {transcriptAnswer}
                     </p>
-                  </div>
-                )}
+                </div>
+              )}
                 {!title && !description && !mediaPreviews.length && !transcriptQuestion && !transcriptAnswer && (
                   <p className="text-[#171415]/40 newsreader-400">
                     Your preview will appear here as you type
                   </p>
                 )}
-              </div>
+        </div>
             </div>
           </div>
         </div>

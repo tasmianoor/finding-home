@@ -23,7 +23,7 @@ export async function GET(request: Request) {
             id: user.id,
             username: user.email?.split('@')[0] || '',
             full_name: userData.user_metadata.full_name || '',
-            relationship_to_author: userData.user_metadata.relationship_to_author || '',
+            relation: userData.user_metadata.relation || '',
             is_family_verified: false,
           }
         ])

@@ -173,3 +173,13 @@ body {
     @apply border-2 border-[var(--color-black)] text-[var(--color-black)] px-6 py-3 rounded-md transition-colors hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed instrument-400 tracking-[0.03em];
   }
 }
+
+h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+}
+
+h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+}

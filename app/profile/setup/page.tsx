@@ -7,6 +7,7 @@ import { Upload, User } from 'lucide-react'
 import Image from 'next/image'
 import MainNav from '../../components/MainNav'
 import Footer from '../../components/Footer'
+import { Button } from '@/components/ui/button'
 
 export default function ProfileSetupPage() {
   const [fullName, setFullName] = useState('')
@@ -16,7 +17,16 @@ export default function ProfileSetupPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClientComponentClient()
+  const [isLoading, setIsLoading] = useState(false)
+  const supabase = createClientComponentClient({
+    options: {
+      global: {
+        headers: {
+          'Accept': 'application/json'
+        }
+      }
+    }
+  })
   const router = useRouter()
 
   useEffect(() => {
@@ -34,6 +44,7 @@ export default function ProfileSetupPage() {
           .select('*')
           .eq('id', session.user.id)
           .single()
+          .throwOnError()
 
         if (profile) {
           router.push('/profile')
@@ -80,7 +91,10 @@ export default function ProfileSetupPage() {
 
       const { error: uploadError } = await supabase.storage
         .from('profiles')
-        .upload(filePath, file)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
 
       if (uploadError) throw uploadError
 
@@ -99,6 +113,7 @@ export default function ProfileSetupPage() {
   const handleSubmit = async () => {
     try {
       setError(null)
+      setIsLoading(true)
       
       if (!fullName || !email || !relation) {
         setError('Please fill in all required fields')
@@ -114,17 +129,20 @@ export default function ProfileSetupPage() {
           id: session.user.id,
           full_name: fullName,
           email: email,
-          relation_to_robin: relation,
+          relation: relation,
           bio: bio,
           avatar_url: avatarUrl,
           updated_at: new Date().toISOString()
         })
+        .throwOnError()
 
       if (updateError) throw updateError
 
       router.push('/profile')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error saving profile')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -135,7 +153,7 @@ export default function ProfileSetupPage() {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 py-12">
           <div className="bg-white rounded-lg shadow-md p-6 sm:p-8">
             <div className="text-center mb-8">
-              <h1 className="text-2xl sm:text-3xl font-bold text-[#171415] mb-2 newsreader-500">
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#171415] mb-2 fraunces-500">
                 Complete Your Profile
               </h1>
               <p className="text-[#171415]/60 newsreader-400">
@@ -244,12 +262,14 @@ export default function ProfileSetupPage() {
                 <p className="text-red-500 text-sm newsreader-400">{error}</p>
               )}
 
-              <button
+              <Button
                 onClick={handleSubmit}
-                className="w-full bg-[#171415] hover:bg-[#171415]/90 text-[#faf9f5] px-4 py-3 rounded-md transition-colors text-base newsreader-400"
+                variant="default"
+                size="lg"
+                isLoading={isLoading}
               >
-                Complete Profile
-              </button>
+                {isLoading ? 'Creating profile...' : 'Create profile'}
+              </Button>
             </div>
           </div>
         </div>

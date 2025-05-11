@@ -1,12 +1,84 @@
 "use client"
 
 import Link from "next/link"
-import { HomeIcon, PlusCircle, Search, Trash2 } from "lucide-react"
+import { HomeIcon, PlusCircle, Search, Baby, Trophy, Palette, Flag, Star, Plane, Heart, Users, Activity } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import type { Database } from "@/lib/database.types"
 import MainNav from "../components/MainNav"
 import Footer from "../components/Footer"
+
+// Icon data structure
+const tagIcons = [
+  { name: "Childhood", icon: "baby.svg", component: <Baby className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Sports", icon: "trophy.svg", component: <Trophy className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Hobbies & Interests", icon: "palette.svg", component: <Palette className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Liberation war", icon: "flag.svg", component: <Flag className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Proud moments", icon: "star.svg", component: <Star className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Travel", icon: "plane.svg", component: <Plane className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Grief", icon: "heart.svg", component: <Heart className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Family", icon: "users.svg", component: <Users className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Health", icon: "activity.svg", component: <Activity className="h-4 w-4 text-[#d97756]" /> },
+]
+
+// Function to upload icons to Supabase storage
+const uploadIcons = async () => {
+  const supabase = createClientComponentClient<Database>()
+  
+  try {
+    // Check if user is authenticated
+    const { data: { session }, error: authError } = await supabase.auth.getSession()
+    if (authError || !session) {
+      console.error('Not authenticated:', authError)
+      return
+    }
+
+    // Create icons bucket if it doesn't exist
+    const { data: buckets, error: bucketsError } = await supabase
+      .storage
+      .listBuckets()
+
+    if (bucketsError) {
+      console.error('Error listing buckets:', bucketsError)
+      return
+    }
+
+    const iconsBucket = buckets.find(b => b.name === 'icons')
+    if (!iconsBucket) {
+      const { error: createError } = await supabase
+        .storage
+        .createBucket('icons', {
+          public: true,
+          fileSizeLimit: 1024 * 1024, // 1MB
+          allowedMimeTypes: ['image/svg+xml']
+        })
+
+      if (createError) {
+        console.error('Error creating icons bucket:', createError)
+        return
+      }
+    }
+
+    // Upload each icon
+    for (const tag of tagIcons) {
+      const { error: uploadError } = await supabase
+        .storage
+        .from('icons')
+        .upload(tag.icon, tag.icon, {
+          contentType: 'image/svg+xml',
+          upsert: true
+        })
+
+      if (uploadError) {
+        console.error(`Error uploading ${tag.icon}:`, uploadError)
+      }
+    }
+
+    console.log('Icons uploaded successfully')
+  } catch (error) {
+    console.error('Error in uploadIcons:', error)
+  }
+}
 
 // Debounce helper function
 function useDebounce<T>(value: T, delay: number): T {
@@ -59,6 +131,11 @@ export default function StoriesPage() {
   const [totalCount, setTotalCount] = useState(0)
   const storiesPerPage = 6
   const supabase = createClientComponentClient<Database>()
+
+  useEffect(() => {
+    // Upload icons when component mounts
+    uploadIcons()
+  }, [])
 
   useEffect(() => {
     const fetchStories = async () => {
@@ -169,36 +246,6 @@ export default function StoriesPage() {
     setCurrentPage(1)
   }
 
-  const handleDelete = async (e: React.MouseEvent, storyId: string) => {
-    e.preventDefault() // Prevent navigation to story detail
-    
-    if (!window.confirm('Are you sure you want to delete this story? This action cannot be undone.')) {
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from('stories')
-        .delete()
-        .eq('id', storyId)
-
-      if (error) {
-        console.error('Error deleting story:', error)
-        return
-      }
-
-      // Remove the story from the local state
-      setStories(stories.filter(story => story.id !== storyId))
-      
-      // If we're on a page that would now be empty, go back one page
-      if (stories.length === 1 && currentPage > 1) {
-        setCurrentPage(prev => prev - 1)
-      }
-    } catch (error) {
-      console.error('Error:', error)
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#faf9f5]">
@@ -220,7 +267,7 @@ export default function StoriesPage() {
       <MainNav />
       <main className="pt-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
-          <h1 className="text-4xl font-bold text-[#171415] mb-8 newsreader-500">
+          <h1 className="text-4xl font-bold text-[#171415] mb-4 fraunces-500">
             All Stories
           </h1>
 
@@ -251,17 +298,7 @@ export default function StoriesPage() {
               </p>
             )}
             <div className="flex flex-wrap gap-2">
-              {[
-                { name: "Childhood", icon: "👶" },
-                { name: "Sports", icon: "🏆" },
-                { name: "Hobbies & Interests", icon: "🎨" },
-                { name: "Liberation war", icon: "🏳️" },
-                { name: "Proud moments", icon: "🌟" },
-                { name: "Travel", icon: "✈️" },
-                { name: "Grief", icon: "💔" },
-                { name: "Family", icon: "👨‍👩‍👧‍👦" },
-                { name: "Health", icon: "❤️" },
-              ].map((filter) => (
+              {tagIcons.map((filter) => (
                 <button
                   key={filter.name}
                   onClick={() => toggleFilter(filter.name)}
@@ -271,7 +308,7 @@ export default function StoriesPage() {
                       : "bg-white border-[#e4d9cb] text-[#171415] hover:bg-[#faf9f5]"
                   } transition-colors`}
                 >
-                  <span>{filter.icon}</span>
+                  {filter.component}
                   <span>{filter.name}</span>
                 </button>
               ))}
@@ -289,7 +326,7 @@ export default function StoriesPage() {
           {/* Stories Section */}
           <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="flex flex-col gap-1">
-              <h2 className="text-2xl font-bold text-[#171415] newsreader-500">Stories</h2>
+              <h2 className="text-2xl font-bold text-[#171415] fraunces-500">Browse the whole collection</h2>
               <p className="text-sm text-[#171415]/60 newsreader-400">
                 Showing {stories.length} of {totalCount} stories
               </p>
@@ -330,36 +367,29 @@ export default function StoriesPage() {
                 <Link 
                   key={story.id} 
                   href={`/stories/${story.id}`} 
-                  className="group cursor-pointer relative"
+                  className="relative group cursor-pointer rounded-md overflow-hidden transition-all duration-200"
                 >
-                  <div className="relative h-64 overflow-hidden rounded-lg">
+                  <div className="relative">
                     <img
                       src={story.thumbnail_url || "/placeholder.svg"}
                       alt={story.title}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      className="w-full h-[360px] object-cover transition-all duration-300 group-hover:brightness-[0.85]"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 flex flex-col justify-end">
-                      <h3 className="text-white text-xl font-bold mb-2 newsreader-500">
+                    <div className="absolute inset-0 bg-black/40 group-hover:bg-[#b15e4e]/90 p-6 group-hover:pl-10 flex flex-col justify-end transition-all duration-300">
+                      <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                         {story.title}
                       </h3>
-                      <p className="text-white/80 text-sm newsreader-400">
+                      <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
                         {story.description}
                       </p>
+                      <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
+                        {new Date(story.created_at).toLocaleDateString('en-US', {
+                          month: 'long',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </p>
                     </div>
-                    <button
-                      onClick={(e) => handleDelete(e, story.id)}
-                      className="absolute top-2 right-2 p-2 bg-[#d97756] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-[#d97756]/90"
-                      aria-label="Delete story"
-                    >
-                      <Trash2 className="h-4 w-4 text-white" />
-                    </button>
-                  </div>
-                  <div className="mt-2 text-sm text-[#171415]/60 newsreader-400">
-                    {new Date(story.created_at).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
                   </div>
                 </Link>
               ))

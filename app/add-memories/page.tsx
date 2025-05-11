@@ -2,7 +2,7 @@
 
 import type React from "react"
 import Link from "next/link"
-import { HomeIcon, PlusCircle, Upload, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react"
+import { HomeIcon, PlusCircle, Upload, Loader2, X, ChevronLeft, ChevronRight, Baby, Users, Heart, Stethoscope, Palette, Flag, Trophy, PartyPopper, Medal, Plane, GraduationCap, Award } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
@@ -189,6 +189,7 @@ export default function AddMemoriesPage() {
 
       console.log('Creating story with data:', storyData)
 
+      // Start a transaction
       const { data: story, error: storyError } = await supabase
         .from('stories')
         .insert([storyData])
@@ -208,24 +209,105 @@ export default function AddMemoriesPage() {
 
       // Add visibility options
       try {
-        const visibilityData = {
+        // Create visibility records for each selected visibility option
+        const visibilityRecords = selectedVisibility.map(visibility => ({
           story_id: story.id,
-          visibility_type: selectedVisibility[0].toLowerCase().replace(/\s+/g, '_'),
+          visibility_type: visibility.toLowerCase().replace(/\s+/g, '_'),
           created_at: new Date().toISOString()
-        }
+        }))
 
-        console.log('Adding visibility options:', visibilityData)
+        console.log('Adding visibility options:', visibilityRecords)
 
         const { error: visibilityError } = await supabase
           .from('story_visibility')
-          .insert([visibilityData])
+          .insert(visibilityRecords)
 
         if (visibilityError) {
           console.error('Visibility error:', visibilityError)
           throw new Error(`Failed to set visibility: ${visibilityError.message}`)
         }
+
+        // Get all profiles that match the visibility types
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, relation')
+          .in('relation', selectedVisibility.map(v => v.toLowerCase().replace(/\s+/g, '_')))
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError)
+          throw new Error(`Failed to fetch profiles: ${profilesError.message}`)
+        }
+
+        console.log('Found matching profiles:', profiles)
+
+        // Create visibility profile records
+        if (profiles && profiles.length > 0) {
+          // Create all records in a single batch
+          const profileRecords = []
+          for (const profile of profiles) {
+            for (const visibility of selectedVisibility) {
+              profileRecords.push({
+                story_id: story.id,
+                profile_id: profile.id,
+                visibility_type: visibility.toLowerCase().replace(/\s+/g, '_'),
+                created_at: new Date().toISOString()
+              })
+            }
+          }
+
+          console.log('Creating visibility profile records:', profileRecords)
+
+          // Verify story ownership before inserting
+          const { data: storyCheck, error: storyCheckError } = await supabase
+            .from('stories')
+            .select('id, user_id')
+            .eq('id', story.id)
+            .single()
+
+          if (storyCheckError) {
+            console.error('Story check error:', storyCheckError)
+            throw new Error(`Story check failed: ${storyCheckError.message}`)
+          }
+
+          if (!storyCheck) {
+            throw new Error(`Story ${story.id} not found before creating visibility profiles`)
+          }
+
+          if (storyCheck.user_id !== session.user.id) {
+            throw new Error('You do not have permission to modify this story')
+          }
+
+          // Insert records in smaller batches to avoid potential issues
+          const batchSize = 10
+          for (let i = 0; i < profileRecords.length; i += batchSize) {
+            const batch = profileRecords.slice(i, i + batchSize)
+            const { error: insertError } = await supabase
+              .from('story_visibility_profiles')
+              .insert(batch)
+
+            if (insertError) {
+              console.error('Insert error:', insertError)
+              throw new Error(`Failed to create visibility profile records: ${insertError.message}`)
+            }
+          }
+
+          console.log('Successfully created all visibility profile records')
+        }
       } catch (error) {
         console.error('Error adding visibility:', error)
+        // If visibility creation fails, we should delete the story to maintain consistency
+        try {
+          const { error: deleteError } = await supabase
+            .from('stories')
+            .delete()
+            .eq('id', story.id)
+          
+          if (deleteError) {
+            console.error('Failed to clean up story after visibility error:', deleteError)
+          }
+        } catch (cleanupError) {
+          console.error('Error during cleanup:', cleanupError)
+        }
         throw new Error(`Failed to set visibility: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
 
@@ -429,6 +511,24 @@ export default function AddMemoriesPage() {
             console.error('Tag error:', tagError)
             throw new Error(`Failed to add tags: ${tagError.message}`)
           }
+
+          // Create visibility records for each tag
+          const tagVisibilityRecords = selectedTags.map(tag => ({
+            story_id: story.id,
+            visibility_type: tag.toLowerCase().replace(/\s+/g, '_'),
+            created_at: new Date().toISOString()
+          }))
+
+          console.log('Adding tag visibility records:', tagVisibilityRecords)
+
+          const { error: tagVisibilityError } = await supabase
+            .from('story_visibility')
+            .insert(tagVisibilityRecords)
+
+          if (tagVisibilityError) {
+            console.error('Tag visibility error:', tagVisibilityError)
+            throw new Error(`Failed to add tag visibility: ${tagVisibilityError.message}`)
+          }
         } catch (error) {
           console.error('Error adding tags:', error)
           throw new Error(`Failed to add tags: ${error instanceof Error ? error.message : 'Unknown error'}`)
@@ -509,32 +609,29 @@ export default function AddMemoriesPage() {
                   <label className="block text-sm font-medium text-[#171415] mb-2 newsreader-400">
                     Upload Media
                   </label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-[#e4d9cb] border-dashed rounded-md">
-                    <div className="space-y-1 text-center">
-                      <Upload className="mx-auto h-12 w-12 text-[#171415]/40" />
-                      <div className="flex text-sm text-[#171415]/60 newsreader-400">
                   <label 
                     htmlFor="file-upload" 
-                          className="relative cursor-pointer bg-white rounded-md font-medium text-[#d97756] hover:text-[#d97756]/90 focus-within:outline-none"
+                    className="mt-1 flex justify-center items-center px-6 pt-5 pb-6 border-2 border-[#e4d9cb] border-dashed rounded-md cursor-pointer hover:border-[#d97756] transition-colors"
                   >
-                          <span>Upload files</span>
-                          <input
-                            id="file-upload"
-                            name="file-upload"
-                            type="file"
-                            multiple
-                            accept="image/*,audio/*,video/*"
-                            onChange={handleFileChange}
-                            className="sr-only"
-                          />
-                  </label>
-                        <p className="pl-1">or drag and drop</p>
+                    <div className="space-y-1 text-center">
+                      <Upload className="mx-auto h-12 w-12 text-[#171415]/40" />
+                      <div className="flex justify-center text-sm text-[#171415]/60 newsreader-400">
+                        <p className="font-normal">Upload, or drag and drop files here</p>
                       </div>
                       <p className="text-xs text-[#171415]/40 newsreader-400">
-                        Images (up to 3), Audio (up to 3), or Video (1)
+                        We currently accept up to 3 images, 1 audio file or 1 video file per post
                       </p>
                     </div>
-                  </div>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      multiple
+                      accept="image/*,audio/*,video/*"
+                      onChange={handleFileChange}
+                      className="sr-only"
+                    />
+                  </label>
                   
                   {/* Media Previews */}
                   {mediaPreviews.length > 0 && (
@@ -587,7 +684,7 @@ export default function AddMemoriesPage() {
                         })
                       }}
                         disabled={isSubmitting}
-                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
+                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border newsreader-400 ${
                         selectedVisibility.includes(option)
                           ? "bg-amber-100 border-amber-300 text-amber-800"
                           : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -605,29 +702,32 @@ export default function AddMemoriesPage() {
                 </p>
                 <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
                   {[
-                    "Childhood",
-                    "Family",
-                    "Grief",
-                    "Health",
-                    "Hobbies & Interests",
-                    "Liberation war",
-                    "Pride",
-                    "Proud moments",
-                    "Sports",
-                    "Travel",
-                  ].map((tag) => (
+                    { name: "Childhood", icon: Baby },
+                    { name: "Family", icon: Users },
+                    { name: "Grief", icon: Heart },
+                    { name: "Health", icon: Stethoscope },
+                    { name: "Hobbies/Interests", icon: Palette },
+                    { name: "Liberation war", icon: Flag },
+                    { name: "Milestones", icon: Award },
+                    { name: "Proud moments", icon: Medal },
+                    { name: "Reunion", icon: PartyPopper },
+                    { name: "School", icon: GraduationCap },
+                    { name: "Sports", icon: Trophy },
+                    { name: "Travel", icon: Plane },
+                  ].sort((a, b) => a.name.localeCompare(b.name)).map(({ name, icon: Icon }) => (
                     <button
-                      key={tag}
+                      key={name}
                       type="button"
-                      onClick={() => toggleTag(tag)}
-                        disabled={isSubmitting}
-                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border ${
-                        selectedTags.includes(tag)
+                      onClick={() => toggleTag(name)}
+                      disabled={isSubmitting}
+                      className={`px-2 sm:px-3 md:px-4 py-2 sm:py-2.5 md:py-3 rounded-md text-xs sm:text-sm md:text-base border newsreader-400 flex items-center gap-2 ${
+                        selectedTags.includes(name)
                           ? "bg-amber-100 border-amber-300 text-amber-800"
                           : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"
                         } transition-colors ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {tag}
+                      <Icon className="w-4 h-4 text-[#d97756]" />
+                      <span className="text-left font-normal">{name}</span>
                     </button>
                   ))}
                 </div>
@@ -657,14 +757,19 @@ export default function AddMemoriesPage() {
             </div>
 
             <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-medium text-[#171415] mb-4 fraunces-500">
+              <h2 className="text-xl font-medium text-[#d97756] mb-4 fraunces-500">
                 Preview
               </h2>
               <div className="prose max-w-none">
                 {title && (
-                  <h3 className="text-2xl font-medium text-[#171415] mb-4 newsreader-500">
+                  <h1 className="text-2xl font-medium text-[#171415] mb-4 fraunces-500">
                     {title}
-                  </h3>
+                  </h1>
+                )}
+                {description && (
+                  <p className="text-[#171415]/80 whitespace-pre-wrap newsreader-400 mb-6">
+                    {description}
+                  </p>
                 )}
                 {mediaPreviews.length > 0 && (
                   <div className="mb-6">
@@ -680,11 +785,11 @@ export default function AddMemoriesPage() {
                                 index === currentImageIndex ? 'opacity-100' : 'opacity-0 absolute top-0 left-0'
                               }`}
                             >
-                          <img
-                            src={preview.url}
+                              <img
+                                src={preview.url}
                                 alt="Preview"
                                 className="w-full h-auto rounded-lg object-cover"
-                          />
+                              />
                             </div>
                           ))}
                         {mediaPreviews.filter(p => p.type.startsWith('image/')).length > 1 && (
@@ -695,12 +800,12 @@ export default function AddMemoriesPage() {
                             >
                               <ChevronLeft className="h-6 w-6" />
                             </button>
-                        <button
+                            <button
                               onClick={nextImage}
                               className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-black/50 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
+                            >
                               <ChevronRight className="h-6 w-6" />
-                        </button>
+                            </button>
                             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
                               {mediaPreviews
                                 .filter(p => p.type.startsWith('image/'))
@@ -712,7 +817,7 @@ export default function AddMemoriesPage() {
                                     }`}
                                   />
                                 ))}
-                      </div>
+                            </div>
                           </>
                         )}
                       </div>
@@ -742,11 +847,6 @@ export default function AddMemoriesPage() {
                       ))}
                   </div>
                 )}
-                {description && (
-                  <p className="text-[#171415]/80 whitespace-pre-wrap newsreader-400">
-                    {description}
-                  </p>
-                )}
                 {transcriptQuestion && (
                   <div className="mt-6 p-4 bg-[#faf9f5] rounded-lg">
                     <h4 className="text-lg font-medium text-[#171415] mb-2 newsreader-500">
@@ -765,14 +865,14 @@ export default function AddMemoriesPage() {
                     <p className="text-[#171415]/80 newsreader-400">
                       {transcriptAnswer}
                     </p>
-                </div>
-              )}
+                  </div>
+                )}
                 {!title && !description && !mediaPreviews.length && !transcriptQuestion && !transcriptAnswer && (
                   <p className="text-[#171415]/40 newsreader-400">
                     Your preview will appear here as you type
                   </p>
                 )}
-        </div>
+              </div>
             </div>
           </div>
         </div>

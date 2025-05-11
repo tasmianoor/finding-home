@@ -5,6 +5,8 @@ import { useState } from "react"
 import { HomeIcon } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
+import Footer from "../components/Footer"
 
 export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -54,52 +56,56 @@ export default function SignInPage() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
-      <header className="bg-amber-50 flex justify-between items-center px-4 sm:px-6 py-4">
+      <header className="bg-[#faf9f5] flex justify-between items-center px-4 sm:px-6 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="bg-black rounded p-1">
-            <HomeIcon className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-gray-800 font-medium">Finding Home</span>
+          <Image
+            src="/logos/logo-orange.png"
+            alt="Finding Home Logo"
+            width={30}
+            height={30}
+            className="w-[30px] h-[30px]"
+          />
+          <span className="text-[#171415] font-normal fraunces-400">Finding Home</span>
         </Link>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center bg-amber-50">
+      <main className="flex-1 flex items-center justify-center bg-[#faf9f5]">
         <div className="max-w-md w-full mx-auto px-4 py-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm">
-            <h1 className="text-2xl font-bold text-gray-900 mb-6">Sign In</h1>
+          <div className="bg-[#faf9f5] p-6 rounded-lg shadow-sm border border-[#e4d9cb]">
+            <h1 className="text-2xl font-bold text-[#171415] mb-6 fraunces-500">Sign In</h1>
             
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
+              <div className="bg-[#faf9f5] text-[#d97756] p-3 rounded-md mb-4 newsreader-400">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleSignIn} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
+              <div className="space-y-1 md:space-y-2">
+                <label htmlFor="email" className="block text-[#171415] newsreader-400">
+                  Email address
                 </label>
                 <input
-                  type="email"
                   id="email"
+                  type="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full p-2 md:p-3 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-1 focus:ring-[#171415] newsreader-400"
                   required
                 />
               </div>
 
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <div className="space-y-1 md:space-y-2">
+                <label htmlFor="password" className="block text-[#171415] newsreader-400">
                   Password
                 </label>
                 <input
-                  type="password"
                   id="password"
+                  type="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="w-full p-2 md:p-3 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-1 focus:ring-[#171415] newsreader-400"
                   required
                 />
               </div>
@@ -107,37 +113,30 @@ export default function SignInPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 px-4 rounded-md transition-colors disabled:opacity-50"
+                className="w-full bg-[#171415] hover:bg-[#171415]/90 text-[#faf9f5] py-2 md:py-3 rounded-md transition-colors newsreader-400"
               >
                 {isLoading ? "Signing in..." : "Sign In"}
               </button>
             </form>
 
-            <p className="mt-4 text-center text-sm text-gray-600">
-              Don't have an account?{" "}
-              <Link href="/" className="text-amber-600 hover:text-amber-700">
-                Sign up
-              </Link>
-            </p>
+            <div className="mt-4">
+              <button className="w-full bg-[#faf9f5] text-[#B34700] py-2 md:py-3 rounded-md hover:bg-[#faf9f5]/90 transition-colors newsreader-400">
+                I forgot my password
+              </button>
+            </div>
+
+            <div className="mt-4 text-center newsreader-400">
+              <Link href="/#join-form" className="text-[#B34700] hover:underline newsreader-400">
+                Sign up here
+              </Link>{" "}
+              if you don't have an account
+            </div>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-4">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row justify-between items-center">
-          <div className="flex items-center gap-2 mb-2 md:mb-0">
-            <div className="bg-white rounded p-1">
-              <HomeIcon className="h-4 w-4 text-gray-900" />
-            </div>
-            <span className="font-medium">Finding home</span>
-          </div>
-          <div className="text-xs text-gray-400">
-            <p>Copyright© 2024</p>
-            <p>Designed by T. Noor</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }

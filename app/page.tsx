@@ -165,7 +165,7 @@ export default function Home() {
       <section id="about" className="bg-[#faf9f5] py-12 md:py-16 relative">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-12">
-            <h2 className="text-2xl md:text-3xl font-medium text-[#171415] fraunces-500">About</h2>
+            <h2 className="text-2xl md:text-3xl text-[#171415] fraunces-500">About</h2>
             <div className="md:col-span-3 text-[#171415] space-y-6 md:space-y-10">
               <p className="text-base md:text-lg leading-relaxed newsreader-400" style={{ fontSize: "24px", lineHeight: "32px" }}>
                 Finding Home is a special place where families can save and share their stories for years to come. Think of it as a digital family album that never gets dusty or lost. Each story becomes a treasure that family members near and far can enjoy together. The best part? These memories stay safe in one place, ready for children, grandchildren, and even great-grandchildren to discover.
@@ -182,7 +182,7 @@ export default function Home() {
       <section className="bg-[#faf9f5] py-12 md:py-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-12">
-          <h2 className="text-2xl md:text-3xl font-medium text-[#171415] fraunces-500">How it works</h2>
+          <h2 className="text-2xl md:text-3xl text-[#171415] fraunces-500">How it works</h2>
             <div className="md:col-span-3 text-[#171415] space-y-6 md:space-y-10">
               <div className="flex items-center gap-3">
                 <KeyRound className="h-6 w-6 text-[#d97756]" />
@@ -226,7 +226,7 @@ export default function Home() {
       {/* Join Form Section */}
       <section id="join-form" className="py-16 md:py-24 bg-[#faf9f5]">
         
-          <h2 className="text-3xl md:text-4xl font-medium text-[#171415] mb-8 md:mb-12 text-center fraunces-500">
+          <h2 className="text-3xl md:text-4xl text-[#171415] mb-8 md:mb-12 text-center fraunces-500">
             Get access today
           </h2>
           <div className="max-w-lg mx-auto px-4 sm:px-6">

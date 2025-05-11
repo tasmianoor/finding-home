@@ -239,6 +239,11 @@ export default function ProfilePage() {
         .getPublicUrl(fileName)
 
       console.log('Generated public URL:', publicUrl)
+      console.log('URL components:', {
+        fileName,
+        bucket: 'avatars',
+        fullUrl: publicUrl
+      })
 
       // Update the profile
       console.log('Updating profile with new avatar URL...')
@@ -411,6 +416,54 @@ export default function ProfilePage() {
     }
   }
 
+  const handleRemoveProfileImage = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError)
+        throw new Error('Failed to get session')
+      }
+
+      if (!session) {
+        console.log('No session found')
+        router.push('/signin')
+        return
+      }
+
+      // Delete the image from storage if it exists
+      if (profile?.avatar_url) {
+        const { error: deleteError } = await supabase.storage
+          .from('avatars')
+          .remove([`${session.user.id}/${profile.avatar_url.split('/').pop()}`])
+
+        if (deleteError) {
+          console.error('Error deleting avatar:', deleteError)
+          throw new Error('Failed to delete profile image from storage')
+        }
+      }
+
+      // Update profile to remove avatar_url
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: null })
+        .eq('id', session.user.id)
+
+      if (updateError) {
+        console.error('Error updating profile:', updateError)
+        throw new Error('Failed to update profile')
+      }
+
+      // Update local state
+      setProfile(prev => prev ? { ...prev, avatar_url: null } : null)
+      setEditedProfile(prev => ({ ...prev, avatar_url: null }))
+      setError(null)
+    } catch (err) {
+      console.error('Error removing profile image:', err)
+      setError(err instanceof Error ? err.message : 'Failed to remove profile image')
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#faf9f5]">
@@ -520,46 +573,54 @@ export default function ProfilePage() {
           )}
 
           <div className="flex flex-col sm:flex-row items-start gap-6">
-            <div className="relative w-32 h-32 rounded-full overflow-hidden bg-[#faf9f5]">
-              {isEditing ? (
-                <div className="relative w-full h-full group">
-                  {editedProfile.avatar_url ? (
-                    <Image
-                      src={editedProfile.avatar_url}
-                      alt={editedProfile.full_name || 'Profile'}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-[#faf9f5] border border-[#e4d9cb]">
-                      <User className="h-12 w-12 text-[#d97756]" />
-                    </div>
-                  )}
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                    <Upload className="h-8 w-8 text-white" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-              ) : (
-                <>
-                  {profile.avatar_url ? (
-                    <Image
-                      src={profile.avatar_url}
-                      alt={profile.full_name || 'Profile'}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-[#faf9f5] border border-[#e4d9cb]">
-                      <User className="h-12 w-12 text-[#d97756]" />
-                    </div>
-                  )}
-                </>
+            <div className="flex flex-col items-center">
+              <div className="relative w-32 h-32 rounded-full overflow-hidden bg-[#faf9f5]">
+                {isEditing ? (
+                  <div className="relative w-full h-full group">
+                    {editedProfile.avatar_url ? (
+                      <img
+                        src={editedProfile.avatar_url}
+                        alt={editedProfile.full_name || 'Profile'}
+                        className="w-[calc(100%+8px)] h-[calc(100%+8px)] object-cover -m-1"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-[#ffcfad]">
+                        <User className="h-12 w-12 text-[#d97756]" />
+                      </div>
+                    )}
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Upload className="h-8 w-8 text-white" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <>
+                    {profile.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.full_name || 'Profile'}
+                        className="w-[calc(100%+8px)] h-[calc(100%+8px)] object-cover -m-1"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-[#ffcfad]">
+                        <User className="h-12 w-12 text-[#d97756]" />
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {isEditing && profile.avatar_url && (
+                <button
+                  onClick={handleRemoveProfileImage}
+                  className="text-[#d97756] hover:text-[#d97756]/80 text-sm font-medium transition-colors mt-2"
+                >
+                  Remove Profile Image
+                </button>
               )}
             </div>
             <div className="flex-1">
@@ -654,10 +715,12 @@ export default function ProfilePage() {
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <Button
-                        onClick={handleEdit}
-                        variant="secondary"
+                        onClick={() => setIsEditing(true)}
+                        variant="outline"
+                        size="lg"
+                        className="border-[#171415] text-[#171415] hover:bg-[#171415] hover:text-[#faf9f5]"
                       >
-                        Edit profile
+                        Edit Profile
                       </Button>
                       <p className="text-sm text-[#171415]/40 newsreader-400">
                         Last updated: {new Date(profile.updated_at).toLocaleDateString()}
@@ -736,7 +799,7 @@ export default function ProfilePage() {
                           <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                             {story.title}
                           </h3>
-                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
+                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-4 transition-all duration-300">
                             {story.description}
                           </p>
                           <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">

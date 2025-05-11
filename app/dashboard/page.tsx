@@ -120,9 +120,49 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchStories = async () => {
       try {
-        const { data: { session }, error: authError } = await supabase.auth.getSession()
-        if (authError || !session) {
-          return
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.push('/signin');
+          return;
+        }
+
+        // Fetch the user's profile to get their relation
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('relation')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching profile:', profileError);
+          return;
+        }
+
+        // Determine allowed visibility types based on user's relation
+        let allowedVisibilities = [];
+        if (profile.relation === 'spouse_or_child') {
+          allowedVisibilities = ['spouse_or_child', 'parent_or_sibling', 'relative'];
+        } else if (profile.relation === 'parent_or_sibling') {
+          allowedVisibilities = ['parent_or_sibling', 'relative'];
+        } else if (profile.relation === 'relative') {
+          allowedVisibilities = ['relative'];
+        } else {
+          allowedVisibilities = [profile.relation];
+        }
+
+        // Fetch stories with the allowed visibility types
+        const { data: stories, error: storiesError } = await supabase
+          .from('stories')
+          .select(`
+            *,
+            story_visibility:story_visibility(*)
+          `)
+          .in('story_visibility.visibility_type', allowedVisibilities)
+          .order('created_at', { ascending: false });
+
+        if (storiesError) {
+          console.error('Error fetching stories:', storiesError);
+          return;
         }
 
         // First get all stories ordered by creation date to establish episode numbers
@@ -336,25 +376,27 @@ export default function DashboardPage() {
                 <Heart className="h-8 w-8 text-[#d97756]" />
               </div>
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#171415] mb-4 fraunces-500">
-                Welcome to the family
+                Welcome to the Noor family collection
               </h2>
               <p className="text-base sm:text-lg text-[#171415] mb-8 max-w-2xl mx-auto newsreader-400">
-                As you explore stories, bookmark your favorites, and add your own memories, this space will come alive with your journey. Each interaction helps weave your unique thread into our family's tapestry.
+                <strong>The Noor family is excited to have you in space their family memories!</strong><br />
+                As you explore and add your own memories, this space will come alive with your journey. Each interaction helps weave your unique thread into our family's tapestry.
               </p>
             </div>
 
             {/* Story cards grid */}
             <div className="mt-16 sm:mt-20">
-              <h3 className="text-lg sm:text-xl font-semibold text-[#171415] mb-6 text-center newsreader-500">
-                Explore our stories
+              <h3 className="text-lg sm:text-xl font-semibold text-[#171415] mb-6 text-center fraunces-500">
+                Getting started
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
                 {[
                   {
                     title: "Your Profile",
-                    description: "View and manage your profile settings. Keep your information up to date to stay connected with the family.",
+                    description: "You must complete your profile to view and add stories. After completing it the first time, you can make changes any time.",
                     icon: <User className="h-5 w-5 text-[#d97756] mb-2" />,
-                    link: "/profile"
+                    link: "/profile",
+                    required: true
                   },
                   {
                     title: "Family Stories",
@@ -374,7 +416,12 @@ export default function DashboardPage() {
                     href={card.link}
                     className="block bg-white p-6 rounded-lg shadow-md hover:shadow-lg border border-[#e4d9cb] hover:border-[#d97756] transition-all duration-200 group hover:-translate-y-1 hover:bg-[#faf9f5]"
                   >
-                    {card.icon}
+                    <div className="flex items-center justify-between mb-2">
+                      {card.icon}
+                      {card.required && (
+                        <span className="text-xs text-white newsreader-400 bg-[#d97756] px-2 py-0.5 rounded-full">Required</span>
+                      )}
+                    </div>
                     <h4 className="font-medium text-[#171415] mb-2 newsreader-500 group-hover:text-[#d97756] transition-colors">{card.title}</h4>
                     <p className="text-[#171415] text-sm newsreader-400 group-hover:text-[#171415]/80">{card.description}</p>
                   </Link>
@@ -401,8 +448,6 @@ export default function DashboardPage() {
                     <span className="font-medium text-[#d97756] text-sm sm:text-base newsreader-500">NEW STORY</span>
                   </div>
                   <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-[#171415] fraunces-500">
-                    Episode {featuredStory.episode_number}:
-                    <br />
                     {featuredStory.title}
                   </h1>
                   <p className="text-base sm:text-lg text-[#171415] max-w-lg newsreader-400">
@@ -452,7 +497,7 @@ export default function DashboardPage() {
                         <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                           {story.title}
                         </h3>
-                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
+                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-4 transition-all duration-300">
                           {story.description}
                         </p>
                         <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
@@ -498,7 +543,7 @@ export default function DashboardPage() {
                         <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                           {story.title}
                         </h3>
-                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
+                        <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-4 transition-all duration-300">
                           {story.description}
                         </p>
                         <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
@@ -547,7 +592,7 @@ export default function DashboardPage() {
                           <h3 className="text-white text-[28px] font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                             {story.title}
                           </h3>
-                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
+                          <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-4 transition-all duration-300">
                             {story.description}
                           </p>
                           <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">

@@ -51,33 +51,39 @@ export default function MainNav() {
       <div className="flex items-end gap-6">
         {isSignedIn ? (
           <>
-            <Link
-              href="/add-memories"
-              className="flex items-center gap-1 font-normal text-sm sm:text-base newsreader-400 text-[#171415] hover:text-[#d97756] transition-colors"
-            >
-              <PlusCircle className="h-3 w-3 sm:h-4 sm:w-4" />
-              Add your own memories
-            </Link>
-            <Link 
-              href="/profile" 
-              className={`text-sm sm:text-base font-normal newsreader-400 transition-colors ${
-                isHomePage 
-                  ? 'text-white hover:text-white/80' 
-                  : 'text-[#171415] hover:text-[#d97756]'
-              } ${pathname === '/profile' ? (isHomePage ? 'text-white/80' : 'text-[#d97756]') : ''}`}
-            >
-              Profile
-            </Link>
-            <Link 
-              href="/signout" 
-              className={`text-sm sm:text-base font-normal newsreader-400 transition-colors ${
-                isHomePage 
-                  ? 'text-white hover:text-white/80' 
-                  : 'text-[#171415] hover:text-[#d97756]'
-              } ${pathname === '/signout' ? (isHomePage ? 'text-white/80' : 'text-[#d97756]') : ''}`}
-            >
-              Sign out
-            </Link>
+            {!isHomePage && (
+              <Link
+                href="/add-memories"
+                className="flex items-center gap-1 font-normal text-sm sm:text-base newsreader-400 text-[#171415] hover:text-[#d97756] transition-colors"
+              >
+                <PlusCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+                Add your own memories
+              </Link>
+            )}
+            {!isHomePage && (
+              <Link 
+                href="/profile" 
+                className={`text-sm sm:text-base font-normal newsreader-400 transition-colors ${
+                  isHomePage 
+                    ? 'text-white hover:text-white/80' 
+                    : 'text-[#171415] hover:text-[#d97756]'
+                } ${pathname === '/profile' ? (isHomePage ? 'text-white/80' : 'text-[#d97756]') : ''}`}
+              >
+                Profile
+              </Link>
+            )}
+            {!isHomePage && (
+              <Link 
+                href="/signout" 
+                className={`text-sm sm:text-base font-normal newsreader-400 transition-colors ${
+                  isHomePage 
+                    ? 'text-white hover:text-white/80' 
+                    : 'text-[#171415] hover:text-[#d97756]'
+                } ${pathname === '/signout' ? (isHomePage ? 'text-white/80' : 'text-[#d97756]') : ''}`}
+              >
+                Sign out
+              </Link>
+            )}
           </>
         ) : (
           <Link 
@@ -104,36 +110,42 @@ export default function MainNav() {
           <div className="flex flex-col gap-4">
             {isSignedIn ? (
               <>
-                <Link
-                  href="/add-memories"
-                  className="flex items-center gap-2 px-4 py-2 rounded-md font-medium text-base newsreader-400 text-[#171415] hover:bg-[#faf9f5] transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <PlusCircle className="h-5 w-5" />
-                  Add your own memories
-                </Link>
-                <Link
-                  href="/profile"
-                  className={`transition-colors font-normal newsreader-400 ${
-                    isHomePage 
-                      ? 'text-white hover:text-white/80' 
-                      : 'text-[#171415] hover:text-[#d97756]'
-                  }`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Profile
-                </Link>
-                <Link
-                  href="/signout"
-                  className={`transition-colors font-normal newsreader-400 ${
-                    isHomePage 
-                      ? 'text-white hover:text-white/80' 
-                      : 'text-[#171415] hover:text-[#d97756]'
-                  }`}
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Sign out
-                </Link>
+                {!isHomePage && (
+                  <Link
+                    href="/add-memories"
+                    className="flex items-center gap-2 px-4 py-2 rounded-md font-medium text-base newsreader-400 text-[#171415] hover:bg-[#faf9f5] transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <PlusCircle className="h-5 w-5" />
+                    Add your own memories
+                  </Link>
+                )}
+                {!isHomePage && (
+                  <Link
+                    href="/profile"
+                    className={`transition-colors font-normal newsreader-400 ${
+                      isHomePage 
+                        ? 'text-white hover:text-white/80' 
+                        : 'text-[#171415] hover:text-[#d97756]'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Profile
+                  </Link>
+                )}
+                {!isHomePage && (
+                  <Link
+                    href="/signout"
+                    className={`transition-colors font-normal newsreader-400 ${
+                      isHomePage 
+                        ? 'text-white hover:text-white/80' 
+                        : 'text-[#171415] hover:text-[#d97756]'
+                    }`}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Sign out
+                  </Link>
+                )}
               </>
             ) : (
               <Link

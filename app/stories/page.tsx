@@ -7,6 +7,7 @@ import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import type { Database } from "@/lib/database.types"
 import MainNav from "../components/MainNav"
 import Footer from "../components/Footer"
+import { useRouter } from "next/navigation"
 
 // Icon data structure
 const tagIcons = [
@@ -131,6 +132,7 @@ export default function StoriesPage() {
   const [totalCount, setTotalCount] = useState(0)
   const storiesPerPage = 6
   const supabase = createClientComponentClient<Database>()
+  const router = useRouter()
 
   useEffect(() => {
     // Upload icons when component mounts
@@ -140,15 +142,37 @@ export default function StoriesPage() {
   useEffect(() => {
     const fetchStories = async () => {
       try {
-        setIsLoading(true)
-        
-        // Check if user is authenticated
-        const { data: { session }, error: authError } = await supabase.auth.getSession()
-        if (authError || !session) {
-          console.error('Not authenticated:', authError)
-          return
+        setIsLoading(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          router.push('/signin');
+          return;
         }
-        
+
+        // Fetch the user's profile to get their relation
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('relation')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching profile:', profileError);
+          return;
+        }
+
+        // Determine allowed visibility types based on user's relation
+        let allowedVisibilities = [];
+        if (profile.relation === 'spouse_or_child') {
+          allowedVisibilities = ['spouse_or_child', 'parent_or_sibling', 'relative'];
+        } else if (profile.relation === 'parent_or_sibling') {
+          allowedVisibilities = ['parent_or_sibling', 'relative'];
+        } else if (profile.relation === 'relative') {
+          allowedVisibilities = ['relative'];
+        } else {
+          allowedVisibilities = [profile.relation];
+        }
+
         // Build the query
         let query = supabase
           .from('stories')
@@ -160,12 +184,16 @@ export default function StoriesPage() {
                 name,
                 icon
               )
-            )
-          `, { count: 'exact' })
+            ),
+            story_visibility:story_visibility(*)
+          `, { count: 'exact' });
+
+        // Apply visibility filter
+        query = query.in('story_visibility.visibility_type', allowedVisibilities);
 
         // Apply search if query exists
         if (debouncedSearchQuery) {
-          query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`)
+          query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
         }
 
         // Apply filters if any are selected
@@ -173,59 +201,59 @@ export default function StoriesPage() {
           query = query.in(
             'story_tags.tags.name',
             selectedFilters
-          )
+          );
         }
 
         // Apply sorting
         switch (sortOrder) {
           case "recent":
-            query = query.order('created_at', { ascending: false })
-            break
+            query = query.order('created_at', { ascending: false });
+            break;
           case "oldest":
-            query = query.order('created_at', { ascending: true })
-            break
+            query = query.order('created_at', { ascending: true });
+            break;
           case "az":
-            query = query.order('title', { ascending: true })
-            break
+            query = query.order('title', { ascending: true });
+            break;
         }
 
         // Apply pagination
-        const start = (currentPage - 1) * storiesPerPage
-        query = query.range(start, start + storiesPerPage - 1)
+        const start = (currentPage - 1) * storiesPerPage;
+        query = query.range(start, start + storiesPerPage - 1);
 
         // Execute query
-        const { data, error, count } = await query
+        const { data, error, count } = await query;
 
         if (error) {
-          console.error('Error fetching stories:', error)
+          console.error('Error fetching stories:', error);
           console.error('Error details:', {
             message: error.message,
             details: error.details,
             hint: error.hint,
             code: error.code
-          })
+          });
         } else if (data) {
-          console.log('Fetched stories:', data.length)
+          console.log('Fetched stories:', data.length);
           const storiesWithTags = data.map(story => ({
             ...story,
             tags: story.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({
               name: st.tags.name,
               icon: st.tags.icon
             })) || []
-          }))
-          setStories(storiesWithTags)
-          setTotalCount(count || 0)
-          setTotalPages(Math.ceil((count || 0) / storiesPerPage))
+          }));
+          setStories(storiesWithTags);
+          setTotalCount(count || 0);
+          setTotalPages(Math.ceil((count || 0) / storiesPerPage));
         }
       } catch (error) {
-        console.error('Error:', error)
+        console.error('Error:', error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
+    };
 
-    fetchStories()
-  }, [supabase, debouncedSearchQuery, sortOrder, currentPage, selectedFilters])
+    fetchStories();
+  }, [supabase, router, debouncedSearchQuery, sortOrder, currentPage, selectedFilters]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSortOrder(e.target.value as "recent" | "oldest" | "az")
@@ -309,7 +337,7 @@ export default function StoriesPage() {
                   } transition-colors`}
                 >
                   {filter.component}
-                  <span>{filter.name}</span>
+                  <span className="newsreader-400">{filter.name}</span>
                 </button>
               ))}
               {selectedFilters.length > 0 && (
@@ -379,15 +407,15 @@ export default function StoriesPage() {
                       <h3 className="text-white text-2xl sm:text-3xl md:text-4xl group-hover:text-2xl sm:group-hover:text-2xl md:group-hover:text-3xl font-bold mb-2 sm:mb-3 fraunces-400 transition-all duration-300">
                         {story.title}
                       </h3>
-                      <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-none transition-all duration-300">
+                      <p className="text-white text-base sm:text-lg mb-3 sm:mb-4 newsreader-400 line-clamp-2 group-hover:line-clamp-4 transition-all duration-300">
                         {story.description}
                       </p>
                       <p className="text-white/80 text-xs sm:text-sm mb-2 sm:mb-3 newsreader-400">
-                        {new Date(story.created_at).toLocaleDateString('en-US', {
-                          month: 'long',
-                          day: 'numeric',
-                          year: 'numeric'
-                        })}
+                    {new Date(story.created_at).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
                       </p>
                     </div>
                   </div>

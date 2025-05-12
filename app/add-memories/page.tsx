@@ -294,6 +294,8 @@ export default function AddMemoriesPage() {
             console.log('Continuing with story creation despite bucket check error')
           }
 
+          console.log('Available buckets:', buckets)
+
           const memoriesBucket = buckets?.find(b => b.name === 'memories')
           if (!memoriesBucket) {
             console.log('Memories bucket not found, attempting to create it...')
@@ -301,31 +303,50 @@ export default function AddMemoriesPage() {
               const { data: newBucket, error: createError } = await supabase
                 .storage
                 .createBucket('memories', {
-                  public: false,
-                  fileSizeLimit: 10 * 1024 * 1024 // 10MB
+                  public: true,
+                  fileSizeLimit: 10 * 1024 * 1024, // 10MB
+                  allowedMimeTypes: ['image/*', 'audio/*', 'video/*']
                 })
 
               if (createError) {
-                // If bucket already exists (race condition), continue
-                if (createError.message.includes('already exists')) {
-                  console.log('Memories bucket already exists, continuing...')
-                } else {
-                  console.error('Failed to create memories bucket:', createError)
-                  // Continue with story creation even if bucket creation fails
-                  console.log('Continuing with story creation despite bucket creation error')
-                }
+                console.error('Failed to create memories bucket:', createError)
+                // Continue with story creation even if bucket creation fails
+                console.log('Continuing with story creation despite bucket creation error')
               }
 
               if (newBucket) {
                 console.log('Memories bucket created successfully:', newBucket)
               }
             } catch (error) {
-              // If bucket creation fails for any reason, try to continue
-              console.log('Error during bucket creation, attempting to continue:', error)
+              console.error('Error during bucket creation:', error)
             }
           } else {
-            console.log('Using existing memories bucket')
+            console.log('Using existing memories bucket:', memoriesBucket)
+            // Update bucket to ensure it's public
+            const { error: updateError } = await supabase
+              .storage
+              .updateBucket('memories', {
+                public: true
+              })
+            
+            if (updateError) {
+              console.error('Error updating bucket to public:', updateError)
+            } else {
+              console.log('Successfully updated bucket to public')
+            }
           }
+
+          // Verify authentication status
+          const { data: { session }, error: authError } = await supabase.auth.getSession()
+          if (authError) {
+            console.error('Auth check error:', authError)
+            throw new Error('Authentication error')
+          }
+          if (!session) {
+            console.error('No active session')
+            throw new Error('No active session')
+          }
+          console.log('User authenticated:', session.user.id)
 
           console.log('Using memories bucket for uploads')
 
@@ -343,22 +364,23 @@ export default function AddMemoriesPage() {
               }
 
               const fileType = file.type.startsWith('image/') ? 'images' : 'audio'
-              const filePath = `${fileType}/${Date.now()}_${file.name}`
+              const filePath = `${session.user.id}/${fileType}/${Date.now()}_${file.name}`
 
-              console.log('Uploading file to path:', filePath)
+              console.log('Attempting to upload file to path:', filePath)
 
               const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('memories')
                 .upload(filePath, file, {
                   cacheControl: '3600',
-                  upsert: false
+                  upsert: true
                 })
 
               if (uploadError) {
                 console.error('Upload error details:', {
                   error: uploadError,
                   file: file.name,
-                  path: filePath
+                  path: filePath,
+                  user: session.user.id
                 })
                 throw new Error(`Upload failed: ${uploadError.message}`)
               }
@@ -387,7 +409,8 @@ export default function AddMemoriesPage() {
             } catch (error) {
               console.error('File processing error:', {
                 error,
-                file: file.name
+                file: file.name,
+                user: session.user.id
               })
               // Return null for failed uploads instead of throwing
               return null

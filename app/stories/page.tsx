@@ -11,75 +11,19 @@ import { useRouter } from "next/navigation"
 
 // Icon data structure
 const tagIcons = [
-  { name: "Childhood", icon: "baby.svg", component: <Baby className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Sports", icon: "trophy.svg", component: <Trophy className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Hobbies & Interests", icon: "palette.svg", component: <Palette className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Liberation war", icon: "flag.svg", component: <Flag className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Proud moments", icon: "star.svg", component: <Star className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Travel", icon: "plane.svg", component: <Plane className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Grief", icon: "heart.svg", component: <Heart className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Family", icon: "users.svg", component: <Users className="h-4 w-4 text-[#d97756]" /> },
-  { name: "Health", icon: "activity.svg", component: <Activity className="h-4 w-4 text-[#d97756]" /> },
+  { name: "Childhood", icon: "/icons/childhood.png" },
+  { name: "Sports", icon: "/icons/sports.png" },
+  { name: "Hobbies", icon: "/icons/hobbies.png" },
+  { name: "War", icon: "/icons/war.png" },
+  { name: "Pride", icon: "/icons/pride.png" },
+  { name: "Travel", icon: "/icons/travel.png" },
+  { name: "Grief", icon: "/icons/grief.png" },
+  { name: "Family", icon: "/icons/family.png" },
+  { name: "Health", icon: "/icons/health.png" },
+  { name: "Milestones", icon: "/icons/milestones.png" },
+  { name: "Reunion", icon: "/icons/reunion.png" },
+  { name: "School", icon: "/icons/school.png" }
 ]
-
-// Function to upload icons to Supabase storage
-const uploadIcons = async () => {
-  const supabase = createClientComponentClient<Database>()
-  
-  try {
-    // Check if user is authenticated
-    const { data: { session }, error: authError } = await supabase.auth.getSession()
-    if (authError || !session) {
-      console.error('Not authenticated:', authError)
-      return
-    }
-
-    // Create icons bucket if it doesn't exist
-    const { data: buckets, error: bucketsError } = await supabase
-      .storage
-      .listBuckets()
-
-    if (bucketsError) {
-      console.error('Error listing buckets:', bucketsError)
-      return
-    }
-
-    const iconsBucket = buckets.find(b => b.name === 'icons')
-    if (!iconsBucket) {
-      const { error: createError } = await supabase
-        .storage
-        .createBucket('icons', {
-          public: true,
-          fileSizeLimit: 1024 * 1024, // 1MB
-          allowedMimeTypes: ['image/svg+xml']
-        })
-
-      if (createError) {
-        console.error('Error creating icons bucket:', createError)
-        return
-      }
-    }
-
-    // Upload each icon
-    for (const tag of tagIcons) {
-      const { error: uploadError } = await supabase
-        .storage
-        .from('icons')
-        .upload(tag.icon, tag.icon, {
-          contentType: 'image/svg+xml',
-          upsert: true
-        })
-
-      if (uploadError) {
-        console.error(`Error uploading ${tag.icon}:`, uploadError)
-      }
-    }
-
-    console.log('Icons uploaded successfully')
-  } catch (error) {
-    console.error('Error in uploadIcons:', error)
-  }
-}
 
 // Debounce helper function
 function useDebounce<T>(value: T, delay: number): T {
@@ -113,11 +57,30 @@ interface Story {
   created_at: string
   updated_at: string
   story_tags?: Array<{
+    tag_id: string
     tags: {
       name: string
       icon: string
     }
   }>
+}
+
+interface StoryWithTags {
+  id: string
+  story_tags: Array<{
+    tags: {
+      name: string
+    }
+  }>
+}
+
+// Function to get icon URL from Supabase storage
+const getIconUrl = (iconName: string) => {
+  const supabase = createClientComponentClient<Database>()
+  const { data } = supabase.storage
+    .from('icons')
+    .getPublicUrl(iconName)
+  return data.publicUrl
 }
 
 export default function StoriesPage() {
@@ -130,76 +93,162 @@ export default function StoriesPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const [availableTags, setAvailableTags] = useState<Array<{ name: string; icon: string }>>([])
+  const [availableTags, setAvailableTags] = useState<Array<{ name: string; icon: string; iconUrl?: string }>>([])
   const storiesPerPage = 6
   const supabase = createClientComponentClient<Database>()
   const router = useRouter()
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Upload icons when component mounts
-    uploadIcons()
-  }, [])
-
-  useEffect(() => {
-    const fetchTags = async () => {
-      try {
-        const { data: tags, error } = await supabase
-          .from('tags')
-          .select('name, icon')
-          .order('name')
-
-        if (error) {
-          console.error('Error fetching tags:', error)
-          return
-        }
-
-        if (tags) {
-          setAvailableTags(tags)
-        }
-      } catch (error) {
-        console.error('Error:', error)
+  const fetchStories = async () => {
+    try {
+      setIsLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/signin');
+        return;
       }
-    }
 
-    fetchTags()
-  }, [supabase])
+      // Fetch the user's profile to get their relation
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('relation')
+        .eq('id', session.user.id)
+        .single();
 
-  useEffect(() => {
-    const fetchStories = async () => {
-      try {
-        setIsLoading(true);
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          router.push('/signin');
+      if (profileError) {
+        console.error('Error fetching profile:', profileError);
+        return;
+      }
+
+      // Determine allowed visibility types based on user's relation
+      let allowedVisibilities = [];
+      if (profile.relation === 'spouse_or_child') {
+        allowedVisibilities = ['spouse_or_child', 'parent_or_sibling', 'relative'];
+      } else if (profile.relation === 'parent_or_sibling') {
+        allowedVisibilities = ['parent_or_sibling', 'relative'];
+      } else if (profile.relation === 'relative') {
+        allowedVisibilities = ['relative'];
+      } else {
+        allowedVisibilities = [profile.relation];
+      }
+
+      // Build the query
+      let query = supabase
+        .from('stories')
+        .select(`
+          *,
+          story_tags (
+            tag_id,
+            tags (
+              name,
+              icon
+            )
+          ),
+          story_visibility:story_visibility(*)
+        `, { count: 'exact' });
+
+      // Apply visibility filter
+      query = query.in('story_visibility.visibility_type', allowedVisibilities);
+
+      // Apply search if query exists
+      if (searchQuery) {
+        query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+      }
+
+      // Apply filters if any are selected
+      if (selectedFilters.length > 0) {
+        console.log('Selected filters:', selectedFilters);
+        
+        try {
+          // First get the tag IDs for the selected tag names
+          const { data: tagData, error: tagError } = await supabase
+            .from('tags')
+            .select('id')
+            .in('name', selectedFilters);
+
+          if (tagError) {
+            console.error('Error fetching tag IDs:', tagError);
+            console.error('Tag error details:', {
+              message: tagError.message,
+              code: tagError.code,
+              details: tagError.details,
+              hint: tagError.hint
+            });
+            setError('Unable to fetch tags. Please try again.');
+            return;
+          }
+
+          if (!tagData || tagData.length === 0) {
+            console.log('No tags found for selected filters');
+            setStories([]);
+            setTotalCount(0);
+            setTotalPages(1);
+            return;
+          }
+
+          const tagIds = tagData.map(tag => tag.id);
+          console.log('Found tag IDs:', tagIds);
+
+          // Then get stories that have these tags
+          const { data: storyTagData, error: storyTagError } = await supabase
+            .from('story_tags')
+            .select('story_id')
+            .in('tag_id', tagIds);
+
+          if (storyTagError) {
+            console.error('Error fetching story tags:', storyTagError);
+            console.error('Story tag error details:', {
+              message: storyTagError.message,
+              code: storyTagError.code,
+              details: storyTagError.details,
+              hint: storyTagError.hint
+            });
+            setError('Unable to fetch stories with selected tags. Please try again.');
+            return;
+          }
+
+          if (!storyTagData || storyTagData.length === 0) {
+            console.log('No stories found with selected tags');
+            setStories([]);
+            setTotalCount(0);
+            setTotalPages(1);
+            return;
+          }
+
+          const storyIds = [...new Set(storyTagData.map(st => st.story_id))];
+          console.log('Found story IDs:', storyIds);
+
+          // Build the query with proper joins and filters
+          query = supabase
+            .from('stories')
+            .select(`
+              *,
+              story_tags!inner (
+                tag_id,
+                tags (
+                  name,
+                  icon
+                )
+              ),
+              story_visibility:story_visibility(*)
+            `, { count: 'exact' })
+            .in('id', storyIds);
+
+          // Apply visibility filter
+          query = query.in('story_visibility.visibility_type', allowedVisibilities);
+
+          // Apply search if query exists
+          if (searchQuery) {
+            query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+          }
+        } catch (error) {
+          console.error('Error in tag filtering:', error);
+          setError('An error occurred while filtering stories. Please try again.');
           return;
         }
-
-        // Fetch the user's profile to get their relation
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('relation')
-          .eq('id', session.user.id)
-          .single();
-
-        if (profileError) {
-          console.error('Error fetching profile:', profileError);
-          return;
-        }
-
-        // Determine allowed visibility types based on user's relation
-        let allowedVisibilities = [];
-        if (profile.relation === 'spouse_or_child') {
-          allowedVisibilities = ['spouse_or_child', 'parent_or_sibling', 'relative'];
-        } else if (profile.relation === 'parent_or_sibling') {
-          allowedVisibilities = ['parent_or_sibling', 'relative'];
-        } else if (profile.relation === 'relative') {
-          allowedVisibilities = ['relative'];
-        } else {
-          allowedVisibilities = [profile.relation];
-        }
-
-        // Build the query
-        let query = supabase
+      } else {
+        // If no filters are selected, use the default select
+        query = supabase
           .from('stories')
           .select(`
             *,
@@ -220,89 +269,120 @@ export default function StoriesPage() {
         if (searchQuery) {
           query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
         }
-
-        // Apply filters if any are selected
-        if (selectedFilters.length > 0) {
-          console.log('Selected filters:', selectedFilters);
-          // Get stories that have any of the selected tags
-          const { data: storiesWithTags, error: tagError } = await supabase
-            .from('stories')
-            .select(`
-              id,
-              story_tags!inner (
-                tags!inner (
-                  name
-                )
-              )
-            `)
-            .in('story_tags.tags.name', selectedFilters);
-
-          if (tagError) {
-            console.error('Error fetching stories with tags:', tagError);
-          } else if (storiesWithTags) {
-            const storyIds = storiesWithTags.map(story => story.id);
-            console.log('Found stories with selected tags:', storyIds);
-            
-            if (storyIds.length > 0) {
-              query = query.in('id', storyIds);
-            } else {
-              // If no stories have the selected tags, return empty result
-              query = query.eq('id', 'no-matches');
-            }
-          }
-        }
-
-        // Apply sorting
-        switch (sortOrder) {
-          case "recent":
-            query = query.order('created_at', { ascending: false });
-            break;
-          case "oldest":
-            query = query.order('created_at', { ascending: true });
-            break;
-          case "az":
-            query = query.order('title', { ascending: true });
-            break;
-        }
-
-        // Apply pagination
-        const start = (currentPage - 1) * storiesPerPage;
-        query = query.range(start, start + storiesPerPage - 1);
-
-        // Execute query
-        const { data, error, count } = await query;
-
-        if (error) {
-          console.error('Error fetching stories:', error);
-          console.error('Error details:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code
-          });
-        } else if (data) {
-          console.log('Fetched stories:', data.length);
-          console.log('First story data:', data[0]);
-          const storiesWithTags = data.map(story => ({
-            ...story,
-            tags: story.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({
-              name: st.tags.name,
-              icon: st.tags.icon
-            })) || []
-          }));
-          setStories(storiesWithTags);
-          setTotalCount(count || 0);
-          setTotalPages(Math.ceil((count || 0) / storiesPerPage));
-        }
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
 
+      // Apply sorting
+      switch (sortOrder) {
+        case "recent":
+          query = query.order('created_at', { ascending: false });
+          break;
+        case "oldest":
+          query = query.order('created_at', { ascending: true });
+          break;
+        case "az":
+          query = query.order('title', { ascending: true });
+          break;
+      }
+
+      // Apply pagination
+      const start = (currentPage - 1) * storiesPerPage;
+      query = query.range(start, start + storiesPerPage - 1);
+
+      // Log the query parameters for debugging
+      console.log('Query parameters:', {
+        selectedFilters,
+        sortOrder,
+        start,
+        end: start + storiesPerPage - 1
+      });
+
+      // Execute query
+      const { data, error, count } = await query;
+
+      if (error) {
+        // Log sanitized error information
+        const sanitizedError = {
+          message: error.message,
+          code: error.code,
+          // Only include details and hint in development
+          ...(process.env.NODE_ENV === 'development' && {
+            details: error.details,
+            hint: error.hint
+          })
+        };
+        
+        console.error('Error fetching stories:', sanitizedError);
+        console.error('Full error object:', error);
+        
+        // Set user-friendly error message based on error type
+        if (error.code === 'PGRST301') {
+          setError('No stories found matching your criteria.');
+        } else if (error.code === 'PGRST116') {
+          setError('Unable to fetch stories. Please check your connection and try again.');
+        } else {
+          setError('Failed to fetch stories. Please try again later.');
+        }
+        
+        // Clear stories to show error state
+        setStories([]);
+        setTotalCount(0);
+        setTotalPages(1);
+      } else if (data) {
+        console.log('Fetched stories:', data.length);
+        console.log('First story data:', data[0]);
+        const storiesWithTags = data.map(story => ({
+          ...story,
+          tags: story.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({
+            name: st.tags.name,
+            icon: st.tags.icon
+          })) || []
+        }));
+        setStories(storiesWithTags);
+        setTotalCount(count || 0);
+        setTotalPages(Math.ceil((count || 0) / storiesPerPage));
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchStories();
   }, [supabase, router, searchQuery, sortOrder, currentPage, selectedFilters]);
+
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const { data: tags, error } = await supabase
+          .from('tags')
+          .select('name, icon')
+          .order('name')
+
+        if (error) {
+          console.error('Error fetching tags:', error)
+          return
+        }
+
+        if (tags) {
+          // Add icon paths to the tags
+          const tagsWithIcons = tags.map(tag => {
+            const tagIcon = tagIcons.find(t => t.name === tag.name)
+            return {
+              ...tag,
+              iconUrl: tagIcon ? tagIcon.icon : '/icons/placeholder.png'
+            }
+          })
+          setAvailableTags(tagsWithIcons)
+        }
+      } catch (error) {
+        console.error('Error:', error)
+      }
+    }
+
+    fetchTags()
+  }, [supabase])
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSortOrder(e.target.value as "recent" | "oldest" | "az")
@@ -347,6 +427,22 @@ export default function StoriesPage() {
           <h1 className="text-4xl font-bold text-[#171415] mb-4 fraunces-500">
             All Stories
           </h1>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-red-600 newsreader-400">{error}</p>
+              <button 
+                onClick={() => {
+                  setError(null);
+                  fetchStories();
+                }}
+                className="mt-2 text-sm text-red-600 hover:text-red-700 newsreader-400"
+              >
+                Try again
+              </button>
+            </div>
+          )}
 
           {/* Search Bar */}
           <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -420,11 +516,19 @@ export default function StoriesPage() {
                   onClick={() => toggleFilter(tag.name)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm newsreader-400 transition-colors ${
                     selectedFilters.includes(tag.name)
-                      ? "bg-[#171415] border-[#171415] text-[#faf9f5]"
+                      ? "bg-[#f8e8e3] border-[#d97756] text-[#171415]"
                       : "bg-white border-[#e4d9cb] text-[#171415] hover:bg-[#faf9f5]"
                   }`}
                 >
-                  {tag.icon && <span className="text-[#d97756]">{tag.icon}</span>}
+                  <img 
+                    src={tag.iconUrl} 
+                    alt={`${tag.name} icon`}
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      console.error(`Failed to load icon for ${tag.name}:`, tag.iconUrl)
+                      e.currentTarget.src = '/placeholder.svg' // Fallback image
+                    }}
+                  />
                   <span>{tag.name}</span>
                 </button>
               ))}

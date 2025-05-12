@@ -152,10 +152,19 @@ export default function AddMemoriesPage() {
     }
 
     try {
+      console.log('Starting story creation process...')
+      
       // Check if user is authenticated
       const { data: { session }, error: authError } = await supabase.auth.getSession()
-      if (authError) throw new Error(`Authentication error: ${authError.message}`)
-      if (!session) throw new Error('No active session found')
+      if (authError) {
+        console.error('Authentication error:', authError)
+        throw new Error(`Authentication error: ${authError.message}`)
+      }
+      if (!session) {
+        console.error('No active session found')
+        throw new Error('No active session found')
+      }
+      console.log('Authentication successful:', session.user.id)
 
       // Check if user has a profile
       const { data: profile, error: profileError } = await supabase
@@ -164,12 +173,23 @@ export default function AddMemoriesPage() {
         .eq('id', session.user.id)
         .single()
 
-      if (profileError) throw new Error(`Profile error: ${profileError.message}`)
-      if (!profile) throw new Error('No profile found for user')
+      if (profileError) {
+        console.error('Profile error:', profileError)
+        throw new Error(`Profile error: ${profileError.message}`)
+      }
+      if (!profile) {
+        console.error('No profile found for user')
+        throw new Error('No profile found for user')
+      }
+      console.log('Profile check successful:', profile)
 
       // Check if database is connected
       const { error: dbError } = await supabase.from('stories').select('count').limit(1)
-      if (dbError) throw new Error(`Database connection error: ${dbError.message}`)
+      if (dbError) {
+        console.error('Database connection error:', dbError)
+        throw new Error(`Database connection error: ${dbError.message}`)
+      }
+      console.log('Database connection successful')
 
       // Create the story first
       const storyData = {
@@ -187,7 +207,11 @@ export default function AddMemoriesPage() {
         updated_at: new Date().toISOString()
       }
 
-      console.log('Creating story with data:', storyData)
+      console.log('Attempting to create story with data:', {
+        ...storyData,
+        user_id: storyData.user_id, // Log the user_id to verify it matches auth.uid()
+        session_user_id: session.user.id // Log the session user_id for comparison
+      })
 
       // Start a transaction
       const { data: story, error: storyError } = await supabase
@@ -197,11 +221,18 @@ export default function AddMemoriesPage() {
         .single()
 
       if (storyError) {
-        console.error('Story creation error:', storyError)
+        console.error('Story creation error:', {
+          error: storyError,
+          code: storyError.code,
+          details: storyError.details,
+          hint: storyError.hint,
+          message: storyError.message
+        })
         throw new Error(`Failed to create story: ${storyError.message}`)
       }
 
       if (!story) {
+        console.error('No story data returned after creation')
         throw new Error('No story data returned after creation')
       }
 
@@ -227,72 +258,7 @@ export default function AddMemoriesPage() {
           throw new Error(`Failed to set visibility: ${visibilityError.message}`)
         }
 
-        // Get all profiles that match the visibility types
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, relation')
-          .in('relation', selectedVisibility.map(v => v.toLowerCase().replace(/\s+/g, '_')))
-
-        if (profilesError) {
-          console.error('Error fetching profiles:', profilesError)
-          throw new Error(`Failed to fetch profiles: ${profilesError.message}`)
-        }
-
-        console.log('Found matching profiles:', profiles)
-
-        // Create visibility profile records
-        if (profiles && profiles.length > 0) {
-          // Create all records in a single batch
-          const profileRecords = []
-          for (const profile of profiles) {
-            for (const visibility of selectedVisibility) {
-              profileRecords.push({
-                story_id: story.id,
-                profile_id: profile.id,
-                visibility_type: visibility.toLowerCase().replace(/\s+/g, '_'),
-                created_at: new Date().toISOString()
-              })
-            }
-          }
-
-          console.log('Creating visibility profile records:', profileRecords)
-
-          // Verify story ownership before inserting
-          const { data: storyCheck, error: storyCheckError } = await supabase
-            .from('stories')
-            .select('id, user_id')
-            .eq('id', story.id)
-            .single()
-
-          if (storyCheckError) {
-            console.error('Story check error:', storyCheckError)
-            throw new Error(`Story check failed: ${storyCheckError.message}`)
-          }
-
-          if (!storyCheck) {
-            throw new Error(`Story ${story.id} not found before creating visibility profiles`)
-          }
-
-          if (storyCheck.user_id !== session.user.id) {
-            throw new Error('You do not have permission to modify this story')
-          }
-
-          // Insert records in smaller batches to avoid potential issues
-          const batchSize = 10
-          for (let i = 0; i < profileRecords.length; i += batchSize) {
-            const batch = profileRecords.slice(i, i + batchSize)
-            const { error: insertError } = await supabase
-              .from('story_visibility_profiles')
-              .insert(batch)
-
-            if (insertError) {
-              console.error('Insert error:', insertError)
-              throw new Error(`Failed to create visibility profile records: ${insertError.message}`)
-            }
-          }
-
-          console.log('Successfully created all visibility profile records')
-        }
+        console.log('Successfully set visibility options')
       } catch (error) {
         console.error('Error adding visibility:', error)
         // If visibility creation fails, we should delete the story to maintain consistency

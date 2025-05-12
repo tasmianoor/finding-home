@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { HomeIcon, PlusCircle, Search, Baby, Trophy, Palette, Flag, Star, Plane, Heart, Users, Activity } from "lucide-react"
+import { HomeIcon, PlusCircle, Search, Baby, Trophy, Palette, Flag, Star, Plane, Heart, Users, Activity, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import type { Database } from "@/lib/database.types"
@@ -125,11 +125,12 @@ export default function StoriesPage() {
   const [stories, setStories] = useState<Story[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const debouncedSearchQuery = useDebounce(searchQuery, 300) // 300ms delay
+  const [searchInput, setSearchInput] = useState("")
   const [sortOrder, setSortOrder] = useState<"recent" | "oldest" | "az">("recent")
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  const [availableTags, setAvailableTags] = useState<Array<{ name: string; icon: string }>>([])
   const storiesPerPage = 6
   const supabase = createClientComponentClient<Database>()
   const router = useRouter()
@@ -138,6 +139,30 @@ export default function StoriesPage() {
     // Upload icons when component mounts
     uploadIcons()
   }, [])
+
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        const { data: tags, error } = await supabase
+          .from('tags')
+          .select('name, icon')
+          .order('name')
+
+        if (error) {
+          console.error('Error fetching tags:', error)
+          return
+        }
+
+        if (tags) {
+          setAvailableTags(tags)
+        }
+      } catch (error) {
+        console.error('Error:', error)
+      }
+    }
+
+    fetchTags()
+  }, [supabase])
 
   useEffect(() => {
     const fetchStories = async () => {
@@ -192,16 +217,39 @@ export default function StoriesPage() {
         query = query.in('story_visibility.visibility_type', allowedVisibilities);
 
         // Apply search if query exists
-        if (debouncedSearchQuery) {
-          query = query.or(`title.ilike.%${debouncedSearchQuery}%,description.ilike.%${debouncedSearchQuery}%`);
+        if (searchQuery) {
+          query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
         }
 
         // Apply filters if any are selected
         if (selectedFilters.length > 0) {
-          query = query.in(
-            'story_tags.tags.name',
-            selectedFilters
-          );
+          console.log('Selected filters:', selectedFilters);
+          // Get stories that have any of the selected tags
+          const { data: storiesWithTags, error: tagError } = await supabase
+            .from('stories')
+            .select(`
+              id,
+              story_tags!inner (
+                tags!inner (
+                  name
+                )
+              )
+            `)
+            .in('story_tags.tags.name', selectedFilters);
+
+          if (tagError) {
+            console.error('Error fetching stories with tags:', tagError);
+          } else if (storiesWithTags) {
+            const storyIds = storiesWithTags.map(story => story.id);
+            console.log('Found stories with selected tags:', storyIds);
+            
+            if (storyIds.length > 0) {
+              query = query.in('id', storyIds);
+            } else {
+              // If no stories have the selected tags, return empty result
+              query = query.eq('id', 'no-matches');
+            }
+          }
         }
 
         // Apply sorting
@@ -234,6 +282,7 @@ export default function StoriesPage() {
           });
         } else if (data) {
           console.log('Fetched stories:', data.length);
+          console.log('First story data:', data[0]);
           const storiesWithTags = data.map(story => ({
             ...story,
             tags: story.story_tags?.map((st: { tags: { name: string; icon: string } }) => ({
@@ -253,7 +302,7 @@ export default function StoriesPage() {
     };
 
     fetchStories();
-  }, [supabase, router, debouncedSearchQuery, sortOrder, currentPage, selectedFilters]);
+  }, [supabase, router, searchQuery, sortOrder, currentPage, selectedFilters]);
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSortOrder(e.target.value as "recent" | "oldest" | "az")
@@ -305,49 +354,80 @@ export default function StoriesPage() {
               <input
                 type="text"
                 placeholder="Search stories..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value)
-                  setCurrentPage(1)
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    setSearchQuery(searchInput);
+                    setCurrentPage(1);
+                  }
                 }}
                 className="w-full px-4 py-2 border border-[#e4d9cb] rounded-md focus:outline-none focus:ring-2 focus:ring-[#d97756] focus:border-transparent newsreader-400"
               />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-[#171415]/40">
-                <Search className="h-5 w-5" />
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
+                {searchInput && (
+                  <button
+                    onClick={() => {
+                      setSearchInput('');
+                      setSearchQuery('');
+                      setCurrentPage(1);
+                    }}
+                    className="text-[#171415]/40 hover:text-[#d97756] transition-colors"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                )}
+                <Search className="h-5 w-5 text-[#171415]/40" />
               </div>
             </div>
           </div>
 
           {/* Filter Tags */}
           <div className="flex flex-col gap-4 mb-12">
-            {selectedFilters.length > 0 && (
-              <p className="text-sm text-[#171415]/60 newsreader-400">
-                Active filters: {selectedFilters.length}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {tagIcons.map((filter) => (
-                <button
-                  key={filter.name}
-                  onClick={() => toggleFilter(filter.name)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md border text-sm newsreader-400 ${
-                    selectedFilters.includes(filter.name)
-                      ? "bg-[#171415] border-[#171415] text-[#faf9f5]"
-                      : "bg-white border-[#e4d9cb] text-[#171415] hover:bg-[#faf9f5]"
-                  } transition-colors`}
-                >
-                  {filter.component}
-                  <span className="newsreader-400">{filter.name}</span>
-                </button>
-              ))}
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-[#171415] fraunces-500">Filter by tags</h3>
               {selectedFilters.length > 0 && (
                 <button
                   onClick={resetFilters}
-                  className="flex items-center gap-2 px-4 py-2 rounded-md border border-[#d97756] bg-[#d97756] text-[#faf9f5] hover:bg-[#d97756]/90 text-sm newsreader-400 transition-colors"
+                  className="text-sm text-[#d97756] hover:text-[#b15e4e] newsreader-400 transition-colors"
                 >
-                  <span>Reset Filters</span>
+                  Clear all filters
                 </button>
               )}
+            </div>
+            {selectedFilters.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedFilters.map((filter) => (
+                  <div
+                    key={filter}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#171415] text-[#faf9f5] rounded-md text-sm newsreader-400"
+                  >
+                    <span>{filter}</span>
+                    <button
+                      onClick={() => toggleFilter(filter)}
+                      className="hover:text-[#d97756] transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag.name}
+                  onClick={() => toggleFilter(tag.name)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-md border text-sm newsreader-400 transition-colors ${
+                    selectedFilters.includes(tag.name)
+                      ? "bg-[#171415] border-[#171415] text-[#faf9f5]"
+                      : "bg-white border-[#e4d9cb] text-[#171415] hover:bg-[#faf9f5]"
+                  }`}
+                >
+                  {tag.icon && <span className="text-[#d97756]">{tag.icon}</span>}
+                  <span>{tag.name}</span>
+                </button>
+              ))}
             </div>
           </div>
 
@@ -387,7 +467,7 @@ export default function StoriesPage() {
             {stories.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <p className="text-[#171415]/60 newsreader-400">
-                  No stories found{debouncedSearchQuery ? ` matching "${debouncedSearchQuery}"` : ''}{selectedFilters.length > 0 ? ` with selected filters` : ''}.
+                  No stories found{searchQuery ? ` matching "${searchQuery}"` : ''}{selectedFilters.length > 0 ? ` with selected filters` : ''}.
                 </p>
               </div>
             ) : (

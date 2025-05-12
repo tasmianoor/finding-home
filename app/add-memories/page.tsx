@@ -290,7 +290,8 @@ export default function AddMemoriesPage() {
 
           if (bucketError) {
             console.error('Bucket check error:', bucketError)
-            throw new Error(`Failed to check storage buckets: ${bucketError.message}`)
+            // Continue with story creation even if bucket check fails
+            console.log('Continuing with story creation despite bucket check error')
           }
 
           const memoriesBucket = buckets?.find(b => b.name === 'memories')
@@ -310,7 +311,8 @@ export default function AddMemoriesPage() {
                   console.log('Memories bucket already exists, continuing...')
                 } else {
                   console.error('Failed to create memories bucket:', createError)
-                  throw new Error(`Failed to create memories bucket: ${createError.message}`)
+                  // Continue with story creation even if bucket creation fails
+                  console.log('Continuing with story creation despite bucket creation error')
                 }
               }
 
@@ -387,12 +389,13 @@ export default function AddMemoriesPage() {
                 error,
                 file: file.name
               })
-              throw new Error(`Failed to process file ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+              // Return null for failed uploads instead of throwing
+              return null
             }
           })
 
-          const uploadedFiles = await Promise.all(uploadPromises)
-          console.log('All files uploaded successfully:', uploadedFiles)
+          const uploadedFiles = (await Promise.all(uploadPromises)).filter((file): file is NonNullable<typeof file> => file !== null)
+          console.log('Successfully uploaded files:', uploadedFiles)
 
           // Filter images and get the first one for thumbnail
           const images = uploadedFiles.filter(f => f.type === 'images')
@@ -401,7 +404,7 @@ export default function AddMemoriesPage() {
           const thumbnailUrl = images.length > 0 ? images[0].url : null
           console.log('Selected thumbnail URL:', thumbnailUrl)
 
-          // Update story with thumbnail
+          // Update story with thumbnail if we have one
           if (thumbnailUrl) {
             const { error: updateError } = await supabase
               .from('stories')
@@ -410,7 +413,8 @@ export default function AddMemoriesPage() {
 
             if (updateError) {
               console.error('Thumbnail update error:', updateError)
-              throw new Error(`Failed to update thumbnail: ${updateError.message}`)
+              // Continue even if thumbnail update fails
+              console.log('Continuing despite thumbnail update error')
             }
           }
 
@@ -431,24 +435,34 @@ export default function AddMemoriesPage() {
 
             if (filesError) {
               console.error('File records error:', filesError)
-              throw new Error(`Failed to add file records: ${filesError.message}`)
+              // Continue even if file records insertion fails
+              console.log('Continuing despite file records error')
             } else {
               console.log('File records added successfully.')
             }
           }
         } catch (error) {
           console.error('Upload process error:', error)
-          throw new Error(`Error in file upload process: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          // Continue with story creation even if file upload fails
+          console.log('Continuing with story creation despite upload process error')
         }
       }
 
       // Add tags if any
       if (selectedTags.length > 0) {
         try {
-          // First, get the tag IDs for the selected tag names
-          const { data: tagsData, error: tagsError } = await supabase
+          console.log('Starting tag processing with selected tags:', selectedTags)
+
+          // Ensure we have between 1-3 tags
+          if (selectedTags.length < 1 || selectedTags.length > 3) {
+            throw new Error('Please select between 1 and 3 tags')
+          }
+
+          // First, get existing tags
+          console.log('Fetching existing tags from database...')
+          const { data: existingTags, error: tagsError } = await supabase
             .from('tags')
-            .select('id')
+            .select('id, name')
             .in('name', selectedTags)
 
           if (tagsError) {
@@ -456,26 +470,64 @@ export default function AddMemoriesPage() {
             throw new Error(`Failed to fetch tags: ${tagsError.message}`)
           }
 
-          if (!tagsData || tagsData.length === 0) {
-            throw new Error('No tags found for the selected names')
+          console.log('Existing tags found:', existingTags)
+
+          // Find which tags need to be created
+          const existingTagNames = existingTags?.map(tag => tag.name) || []
+          const tagsToCreate = selectedTags.filter(tag => !existingTagNames.includes(tag))
+
+          console.log('Tags to create:', tagsToCreate)
+
+          // Create new tags if needed
+          let createdTags = []
+          if (tagsToCreate.length > 0) {
+            console.log('Creating new tags in database...')
+            const { data: newTags, error: createError } = await supabase
+              .from('tags')
+              .insert(tagsToCreate.map(name => ({ name })))
+              .select()
+
+            if (createError) {
+              console.error('Error creating tags:', createError)
+              throw new Error(`Failed to create tags: ${createError.message}`)
+            }
+
+            createdTags = newTags || []
+            console.log('New tags created:', createdTags)
           }
 
-          // Create the story_tags records with the correct tag IDs
-          const tagRecords = tagsData.map(tag => ({
-            story_id: story.id,
-            tag_id: tag.id,
-            created_at: new Date().toISOString()
-          }))
+          // Combine existing and newly created tags
+          const allTags = [...(existingTags || []), ...createdTags]
+          console.log('All tags (existing + new):', allTags)
 
-          console.log('Adding tags:', tagRecords)
+          // Verify we have all the selected tags
+          if (allTags.length !== selectedTags.length) {
+            throw new Error('Failed to process all selected tags')
+          }
 
-          const { error: tagError } = await supabase
-            .from('story_tags')
-            .insert(tagRecords)
-            
-          if (tagError) {
-            console.error('Tag error:', tagError)
-            throw new Error(`Failed to add tags: ${tagError.message}`)
+          // Create and insert story_tags records one by one
+          console.log('Starting to create story_tags records...')
+          for (const tag of allTags) {
+            const storyTagRecord = {
+              story_id: story.id,
+              tag_id: tag.id,
+              created_at: new Date().toISOString()
+            }
+
+            console.log('Inserting story_tag record:', storyTagRecord)
+
+            const { data: insertedRecord, error: insertError } = await supabase
+              .from('story_tags')
+              .insert(storyTagRecord)
+              .select()
+              .single()
+
+            if (insertError) {
+              console.error('Error inserting story_tag record:', insertError)
+              throw new Error(`Failed to add tag ${tag.name} to story: ${insertError.message}`)
+            }
+
+            console.log('Successfully inserted story_tag record:', insertedRecord)
           }
 
           // Create visibility records for each tag
@@ -495,10 +547,18 @@ export default function AddMemoriesPage() {
             console.error('Tag visibility error:', tagVisibilityError)
             throw new Error(`Failed to add tag visibility: ${tagVisibilityError.message}`)
           }
+
+          console.log('Successfully completed all tag operations')
         } catch (error) {
           console.error('Error adding tags:', error)
-          throw new Error(`Failed to add tags: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          // Continue with story creation even if tag operations fail
+          console.log('Continuing with story creation despite tag operation errors')
         }
+      } else {
+        // If no tags are selected, show an error
+        setError('Please select at least 1 tag')
+        setIsSubmitting(false)
+        return
       }
 
       // If we get here, everything was successful
@@ -664,7 +724,7 @@ export default function AddMemoriesPage() {
 
               <div>
                 <p className="block text-xs sm:text-sm md:text-base font-medium mb-2 sm:mb-3 md:mb-4">
-                  Choose any 3 tags that best describe your post:
+                  Choose 1-3 tags that best describe your post:
                 </p>
                 <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3">
                   {[
